@@ -1,0 +1,6 @@
+apiVersion: v2
+name: npci-forum-chart
+description: Helm deployment chart for NPCI Forum application, Postgres DB, and Vector DB
+type: application
+version: 1.0.0
+appVersion: "1.0.0"

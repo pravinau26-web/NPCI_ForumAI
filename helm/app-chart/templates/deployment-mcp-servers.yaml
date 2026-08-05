@@ -1,0 +1,95 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-mcp-forum
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ .Release.Name }}-mcp-forum
+  template:
+    metadata:
+      labels:
+        app: {{ .Release.Name }}-mcp-forum
+    spec:
+      containers:
+        - name: mcp-forum
+          image: python:3.11-slim
+          command: ["sh", "-c", "pip install fastapi uvicorn pydantic && python /app/mcp_servers/mcp_forum_server.py"]
+          ports:
+            - containerPort: 8001
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mcp-forum-service
+spec:
+  ports:
+    - port: 8001
+      targetPort: 8001
+  selector:
+    app: {{ .Release.Name }}-mcp-forum
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-mcp-evaluator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ .Release.Name }}-mcp-evaluator
+  template:
+    metadata:
+      labels:
+        app: {{ .Release.Name }}-mcp-evaluator
+    spec:
+      containers:
+        - name: mcp-evaluator
+          image: python:3.11-slim
+          command: ["sh", "-c", "pip install fastapi uvicorn pydantic && python /app/mcp_servers/mcp_ai_evaluator.py"]
+          ports:
+            - containerPort: 8002
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mcp-evaluator-service
+spec:
+  ports:
+    - port: 8002
+      targetPort: 8002
+  selector:
+    app: {{ .Release.Name }}-mcp-evaluator
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-mcp-cost-tracker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ .Release.Name }}-mcp-cost-tracker
+  template:
+    metadata:
+      labels:
+        app: {{ .Release.Name }}-mcp-cost-tracker
+    spec:
+      containers:
+        - name: mcp-cost-tracker
+          image: python:3.11-slim
+          command: ["sh", "-c", "pip install fastapi uvicorn pydantic && python /app/mcp_servers/mcp_cost_tracker.py"]
+          ports:
+            - containerPort: 8003
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mcp-cost-tracker-service
+spec:
+  ports:
+    - port: 8003
+      targetPort: 8003
+  selector:
+    app: {{ .Release.Name }}-mcp-cost-tracker
