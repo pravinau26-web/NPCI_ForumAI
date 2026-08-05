@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Bell, Search, Shield, User as UserIcon, Check, Circle, Sun, Moon, LogOut, Menu } from "lucide-react";
 import { User, Notification } from "../types";
+import NPCILogo from "./NPCILogo";
 
 interface HeaderProps {
   currentUser: User;
@@ -99,17 +100,17 @@ export default function Header({
             onClick={() => onViewChange("forum")}
             className="flex items-center gap-3 cursor-pointer select-none group"
           >
-            <div className="hidden sm:block overflow-hidden rounded-md group-hover:scale-105 transition-transform duration-200 bg-white dark:bg-slate-900 dark:text-slate-100 p-1">
-              <div className="flex items-center gap-1.5"><div className="bg-blue-700 text-white font-black italic tracking-tighter text-xl px-2 py-0.5 rounded-sm">NPCI</div></div>
+            <div className="hidden sm:flex items-center group-hover:scale-105 transition-transform duration-200 p-1">
+              <NPCILogo size="md" showText={true} />
             </div>
-            <div className="hidden sm:block">
-              <div className="font-bold text-lg tracking-tight text-slate-900 dark:text-white flex items-center gap-1.5">
-                <span>Featurist NPCI Forum</span>
+            <div className="hidden sm:block border-l border-slate-200 dark:border-slate-800 pl-3">
+              <div className="font-bold text-base tracking-tight text-slate-900 dark:text-white flex items-center gap-1.5">
+                <span>Featurist Forum</span>
                 <span className="text-[10px] font-semibold bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 border border-blue-100 dark:border-blue-800/50 px-2 py-0.5 rounded-full">
                   AI Powered
                 </span>
               </div>
-              <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Secure Payments Workspace</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">National Payments Workspace</p>
             </div>
           </div>
         </div>

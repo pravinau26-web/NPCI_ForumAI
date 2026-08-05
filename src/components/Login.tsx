@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Shield, Sparkles, UserCheck, Mail, UserPlus, Key, ArrowRight, Check, Activity, Lock, AlertCircle, HelpCircle, Sun, Moon, Eye, EyeOff } from "lucide-react";
 import { User } from "../types";
+import NPCILogo from "./NPCILogo";
 
 interface LoginProps {
   onLoginSuccess: (user: User) => void;
@@ -304,17 +305,15 @@ export default function Login({ onLoginSuccess, theme, onToggleTheme }: LoginPro
       <div className="flex-1 bg-white dark:bg-slate-900 flex flex-col justify-between p-8 lg:p-12 border-b lg:border-b-0 lg:border-r border-slate-200 dark:border-slate-800 text-left overflow-y-auto">
         <div className="space-y-6">
           <div className="flex items-center gap-3">
-            <div className="bg-blue-600/10 p-2.5 rounded-2xl border border-blue-200 dark:border-slate-800 shadow-sm">
-              <Shield className="w-8 h-8 text-blue-600 dark:text-indigo-400" />
-            </div>
-            <div>
+            <NPCILogo size="lg" showText={true} />
+            <div className="border-l border-slate-200 dark:border-slate-800 pl-3">
               <h1 className="font-extrabold text-xl tracking-tight text-slate-900 dark:text-white flex items-center gap-1.5">
-                <span>NPCI Forum</span>
+                <span>Featurist Forum</span>
                 <span className="text-[10px] font-bold bg-blue-100 dark:bg-indigo-500/20 text-blue-800 dark:text-indigo-300 border border-blue-200 dark:border-indigo-500/30 px-2.5 py-0.5 rounded-full uppercase font-mono">
-                  Featurist
+                  v2.4
                 </span>
               </h1>
-              <p className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-wider font-mono">National Payments Workspace</p>
+              <p className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-wider font-mono">National Payments Corporation Workspace</p>
             </div>
           </div>
 

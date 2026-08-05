@@ -107,6 +107,30 @@ resource "aws_security_group" "ec2_sg" {
   }
 
   ingress {
+    description = "Grafana UI"
+    from_port   = 3001
+    to_port     = 3001
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    description = "Prometheus Metrics"
+    from_port   = 9090
+    to_port     = 9090
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    description = "Backend Port"
+    from_port   = 8000
+    to_port     = 8000
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
     description = "HTTPS Traffic"
     from_port   = 443
     to_port     = 443
@@ -230,27 +254,75 @@ resource "aws_instance" "app_server" {
   user_data = <<-EOF
               #!/bin/bash
               apt-get update -y
-              apt-get install -y docker.io curl git
+              apt-get install -y docker.io curl git xfsProgs
               systemctl start docker
               systemctl enable docker
               usermod -aG docker ubuntu
 
-              # Install K3s and Helm
+              # 1. Format and Mount AWS EBS Volume for DB Persistence
+              mkdir -p /data/db
+              if ! blkid /dev/sdh && ! blkid /dev/xvdh && ! blkid /dev/nvme1n1; then
+                mkfs -t ext4 /dev/sdh || mkfs -t ext4 /dev/xvdh || mkfs -t ext4 /dev/nvme1n1 || true
+              fi
+              mount /dev/sdh /data/db || mount /dev/xvdh /data/db || mount /dev/nvme1n1 /data/db || true
+              chmod -R 777 /data/db
+
+              # 2. Install K3s Kubernetes and Helm
               curl -sfL https://get.k3s.io | sh -
               curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
 
-              # Pull and run Docker containers automatically
+              # 3. Pull and run Docker containers with EBS volume persistence
               docker pull pravinnpci/npci-forum-python-backend:latest || true
               docker rm -f npci-backend || true
-              docker run -d --name npci-backend -p 8000:8000 --restart always pravinnpci/npci-forum-python-backend:latest || true
+              docker run -d --name npci-backend -p 8000:8000 -v /data/db:/data/db --restart always pravinnpci/npci-forum-python-backend:latest || true
 
               docker pull pravinnpci/npci-forum-app:latest || true
               docker rm -f npci-app || true
-              docker run -d --name npci-app -p 3000:3000 --restart always pravinnpci/npci-forum-app:latest || true
+              docker run -d --name npci-app -p 3000:3000 -v /data/db:/data/db --restart always pravinnpci/npci-forum-app:latest || true
               EOF
 
   tags = {
     Name = "npci-forum-ec2-instance"
+  }
+}
+
+# 10. Dedicated Grafana & Prometheus Monitoring EC2 Instance
+resource "aws_instance" "grafana_monitoring" {
+  ami                    = data.aws_ami.ubuntu.id
+  instance_type          = "t3.micro"
+  subnet_id              = aws_subnet.public.id
+  vpc_security_group_ids = [aws_security_group.ec2_sg.id]
+  key_name               = aws_key_pair.generated_key.key_name
+
+  user_data = <<-EOF
+              #!/bin/bash
+              apt-get update -y
+              apt-get install -y docker.io curl
+              systemctl start docker
+              systemctl enable docker
+
+              # Run Prometheus
+              mkdir -p /etc/prometheus
+              cat <<'PROM' > /etc/prometheus/prometheus.yml
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: 'npci_forum_app'
+    static_configs:
+      - targets: ['${data.aws_eip.existing_eip.public_ip}:3000', '${data.aws_eip.existing_eip.public_ip}:8000']
+PROM
+
+              docker rm -f prometheus || true
+              docker run -d --name prometheus -p 9090:9090 -v /etc/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml --restart always prom/prometheus:latest
+
+              # Run Grafana Server
+              docker rm -f grafana || true
+              docker run -d --name grafana -p 3001:3000 -e "GF_SECURITY_ADMIN_PASSWORD=admin" -e "GF_USERS_ALLOW_SIGN_UP=false" --restart always grafana/grafana:latest
+              EOF
+
+  tags = {
+    Name = "npci-forum-grafana-monitoring-server"
   }
 }
 

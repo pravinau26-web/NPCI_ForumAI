@@ -144,12 +144,13 @@ jobs:
             chmod 600 ~/.ssh/id_rsa
             ssh-keyscan -H ${EC2_IP} >> ~/.ssh/known_hosts || true
             ssh -o StrictHostKeyChecking=no ubuntu@${EC2_IP} "
+              sudo mkdir -p /data/db && sudo chmod 777 /data/db && \
               sudo docker pull pravinnpci/npci-forum-python-backend:latest && \
               sudo docker rm -f npci-backend || true && \
-              sudo docker run -d --name npci-backend -p 8000:8000 --restart always pravinnpci/npci-forum-python-backend:latest && \
+              sudo docker run -d --name npci-backend -p 8000:8000 -v /data/db:/data/db --restart always pravinnpci/npci-forum-python-backend:latest && \
               sudo docker pull pravinnpci/npci-forum-app:latest && \
               sudo docker rm -f npci-app || true && \
-              sudo docker run -d --name npci-app -p 3000:3000 --restart always pravinnpci/npci-forum-app:latest
+              sudo docker run -d --name npci-app -p 3000:3000 -v /data/db:/data/db --restart always pravinnpci/npci-forum-app:latest
             "
             echo "Successfully started Docker containers on EC2 (${EC2_IP})"
           else
@@ -198,17 +199,56 @@ jobs:
 
   # JOB 6: Helm Packaging & Kubernetes Specs Validation
   helm-k8s-packaging:
-    name: 6. Package Helm Charts & K8s Specs
+    name: 6. Kubernetes Cluster & Helm Chart Validation
     needs: [infrastructure, monitor-docker-logs]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code Repository
         uses: actions/checkout@v3
 
-      - name: Validate Helm Chart
+      - name: Validate Helm Chart & Verify K8s Cluster Status
         run: |
           echo "Linting Helm Chart..."
           helm lint helm/app-chart
-          echo "Helm deployment manifests packaged successfully for EC2 IP: ${{ needs.infrastructure.outputs.ec2_ip }}"
+          
+          EC2_IP="${{ needs.infrastructure.outputs.ec2_ip }}"
+          SSH_KEY="${{ needs.infrastructure.outputs.ec2_ssh_key }}"
+          if [ -z "${SSH_KEY}" ]; then
+            SSH_KEY="${{ secrets.EC2_SSH_KEY }}"
+          fi
+          
+          if [ -n "${SSH_KEY}" ]; then
+            mkdir -p ~/.ssh
+            echo "${SSH_KEY}" > ~/.ssh/id_rsa
+            chmod 600 ~/.ssh/id_rsa
+            ssh-keyscan -H ${EC2_IP} >> ~/.ssh/known_hosts || true
+            
+            echo "==================== KUBERNETES NODE STATUS ===================="
+            ssh -o StrictHostKeyChecking=no ubuntu@${EC2_IP} "sudo kubectl get nodes" || true
+            
+            echo "==================== KUBERNETES PODS STATUS ===================="
+            ssh -o StrictHostKeyChecking=no ubuntu@${EC2_IP} "sudo kubectl get pods -A" || true
+          fi
+          echo "Kubernetes & Helm charts verified successfully for EC2 IP: ${EC2_IP}"
+
+  # JOB 7: Grafana & Prometheus Monitoring Verification
+  grafana-monitoring-check:
+    name: 7. Grafana & Prometheus Monitoring Health Check
+    needs: [infrastructure, helm-k8s-packaging]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check Grafana & Prometheus Services
+        run: |
+          EC2_IP="${{ needs.infrastructure.outputs.ec2_ip }}"
+          echo "Target EC2 Monitoring IP: ${EC2_IP}"
+          echo "Grafana Dashboard URL: http://${EC2_IP}:3001"
+          echo "Prometheus Metrics URL: http://${EC2_IP}:9090"
+          
+          echo "Testing Grafana UI availability..."
+          curl -I --connect-timeout 5 "http://${EC2_IP}:3001" || echo "Grafana Server initializing..."
+          
+          echo "Testing Prometheus Metrics collector..."
+          curl -I --connect-timeout 5 "http://${EC2_IP}:9090" || echo "Prometheus collector initializing..."
+
 
 

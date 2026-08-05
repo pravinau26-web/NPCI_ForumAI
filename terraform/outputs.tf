@@ -33,3 +33,13 @@ output "s3_bucket_website_endpoint" {
   value       = aws_s3_bucket_website_configuration.frontend_website.website_endpoint
   description = "URL endpoint of the static frontend S3 bucket"
 }
+
+output "grafana_public_ip" {
+  value       = aws_instance.grafana_monitoring.public_ip
+  description = "Public IP address of the Grafana monitoring server"
+}
+
+output "grafana_url" {
+  value       = "http://${aws_instance.grafana_monitoring.public_ip}:3001"
+  description = "Grafana dashboard URL"
+}
