@@ -123,9 +123,20 @@ jobs:
       - name: Checkout Code Repository
         uses: actions/checkout@v3
 
-      - name: Validate Helm Chart & Init SQL ConfigMaps
+      - name: Validate Helm Chart & Deploy Containers to EC2
         run: |
           echo "Linting Helm Chart..."
           helm lint helm/app-chart
           echo "Helm deployment manifests packaged successfully for EC2 IP: ${{ needs.infrastructure.outputs.ec2_ip }}"
+          
+          if [ -n "${{ secrets.EC2_SSH_KEY }}" ]; then
+            echo "SSH key found, deploying containers directly to EC2 (${{ needs.infrastructure.outputs.ec2_ip }})..."
+            mkdir -p ~/.ssh
+            echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/id_rsa
+            chmod 600 ~/.ssh/id_rsa
+            ssh-keyscan -H ${{ needs.infrastructure.outputs.ec2_ip }} >> ~/.ssh/known_hosts || true
+            ssh -o StrictHostKeyChecking=no ubuntu@${{ needs.infrastructure.outputs.ec2_ip }} "sudo docker pull pravinnpci/npci-forum-python-backend:latest && sudo docker rm -f npci-backend || true && sudo docker run -d --name npci-backend -p 8000:8000 --restart always pravinnpci/npci-forum-python-backend:latest && sudo docker pull pravinnpci/npci-forum-app:latest && sudo docker rm -f npci-app || true && sudo docker run -d --name npci-app -p 3000:3000 --restart always pravinnpci/npci-forum-app:latest"
+          else
+            echo "Notice: EC2_SSH_KEY secret not set. Containers will auto-deploy via EC2 user_data on instance launch."
+          fi
 

@@ -221,8 +221,20 @@ resource "aws_instance" "app_server" {
               apt-get install -y docker.io curl git
               systemctl start docker
               systemctl enable docker
+              usermod -aG docker ubuntu
+
+              # Install K3s and Helm
               curl -sfL https://get.k3s.io | sh -
               curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+
+              # Pull and run Docker containers automatically
+              docker pull pravinnpci/npci-forum-python-backend:latest || true
+              docker rm -f npci-backend || true
+              docker run -d --name npci-backend -p 8000:8000 --restart always pravinnpci/npci-forum-python-backend:latest || true
+
+              docker pull pravinnpci/npci-forum-app:latest || true
+              docker rm -f npci-app || true
+              docker run -d --name npci-app -p 3000:3000 --restart always pravinnpci/npci-forum-app:latest || true
               EOF
 
   tags = {
