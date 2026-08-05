@@ -147,6 +147,14 @@ resource "aws_security_group" "ec2_sg" {
   }
 
   ingress {
+    description = "Vector DB Engine Port"
+    from_port   = 6333
+    to_port     = 6333
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
     description = "HTTPS Traffic"
     from_port   = 443
     to_port     = 443
@@ -259,7 +267,7 @@ resource "aws_key_pair" "generated_key" {
   public_key = tls_private_key.ec2_key.public_key_openssh
 }
 
-# 8. EC2 Instance for Helm / Container Runtime
+# 8. EC2 Instance 1: Primary Application Node (Web App, AI Backend, MCP Server, PostgreSQL)
 resource "aws_instance" "app_server" {
   ami                    = data.aws_ami.ubuntu.id
   instance_type          = var.instance_type
@@ -281,16 +289,10 @@ resource "aws_instance" "app_server" {
                 mkfs -t ext4 /dev/sdh || mkfs -t ext4 /dev/xvdh || mkfs -t ext4 /dev/nvme1n1 || true
               fi
               mount /dev/sdh /data/db || mount /dev/xvdh /data/db || mount /dev/nvme1n1 /data/db || true
+              mkdir -p /data/db/postgres /data/db/uploads
               chmod -R 777 /data/db
 
-              # 2. Install K3s Kubernetes and Helm
-              curl -sfL https://get.k3s.io | sh -
-              curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
-
-              # 3. Pull and run Docker containers with EBS volume persistence (Free Tier PostgreSQL + Vector DB + Backend + App + Monitoring)
-              mkdir -p /data/db/postgres /data/db/vector
-              chmod -R 777 /data/db
-
+              # 2. Run App Core Services
               docker pull postgres:15-alpine || true
               docker rm -f npci-postgres || true
               docker run -d --name npci-postgres -p 5432:5432 -e POSTGRES_DB=npci_forum -e POSTGRES_USER=npci_user -e POSTGRES_PASSWORD=npci_password -v /data/db/postgres:/var/lib/postgresql/data --restart always postgres:15-alpine || true
@@ -306,10 +308,38 @@ resource "aws_instance" "app_server" {
               docker pull pravinnpci/npci-forum-app:latest || true
               docker rm -f npci-app || true
               docker run -d --name npci-app -p 3000:3000 -v /data/db:/data/db --restart always pravinnpci/npci-forum-app:latest || true
+              EOF
 
-              # 4. Setup Prometheus & Grafana Monitoring on Elastic IP (16.112.205.103)
-              rm -rf /etc/prometheus/prometheus.yml
-              mkdir -p /etc/prometheus
+  tags = {
+    Name = "npci-forum-app-node"
+  }
+}
+
+# 9. EC2 Instance 2: Dedicated Monitoring & Vector DB Node (Prometheus, Grafana, Vector DB RAG Store)
+resource "aws_instance" "monitoring_vector_server" {
+  ami                    = data.aws_ami.ubuntu.id
+  instance_type          = var.instance_type
+  subnet_id              = aws_subnet.public.id
+  vpc_security_group_ids = [aws_security_group.ec2_sg.id]
+  key_name               = aws_key_pair.generated_key.key_name
+
+  user_data = <<-EOF
+              #!/bin/bash
+              apt-get update -y
+              apt-get install -y docker.io curl git
+              systemctl start docker
+              systemctl enable docker
+              usermod -aG docker ubuntu
+
+              mkdir -p /data/vector /etc/prometheus
+              chmod -R 777 /data/vector
+
+              # 1. Run Vector DB for Document Chunks RAG
+              docker pull qdrant/qdrant:latest || true
+              docker rm -f npci-vector-db || true
+              docker run -d --name npci-vector-db -p 6333:6333 -v /data/vector:/qdrant/storage --restart always qdrant/qdrant:latest || true
+
+              # 2. Setup Prometheus Monitoring
               cat <<'PROM' > /etc/prometheus/prometheus.yml
 global:
   scrape_interval: 15s
@@ -317,20 +347,21 @@ global:
 scrape_configs:
   - job_name: 'npci_forum_services'
     static_configs:
-      - targets: ['localhost:3000', 'localhost:8000', 'localhost:5432']
+      - targets: ['16.112.205.103:3000', '16.112.205.103:8000', '16.112.205.103:8001', '16.112.205.103:5432']
 PROM
 
               docker pull prom/prometheus:latest || true
               docker rm -f prometheus || true
               docker run -d --name prometheus -p 9090:9090 -v /etc/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml --restart always prom/prometheus:latest || true
 
+              # 3. Setup Grafana Dashboard
               docker pull grafana/grafana:latest || true
               docker rm -f grafana || true
               docker run -d --name grafana -p 3001:3000 -e "GF_SECURITY_ADMIN_PASSWORD=admin" -e "GF_USERS_ALLOW_SIGN_UP=false" --restart always grafana/grafana:latest || true
               EOF
 
   tags = {
-    Name = "npci-forum-ec2-instance"
+    Name = "npci-forum-monitoring-vector-node"
   }
 }
 
