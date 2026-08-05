@@ -271,7 +271,14 @@ resource "aws_instance" "app_server" {
               curl -sfL https://get.k3s.io | sh -
               curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
 
-              # 3. Pull and run Docker containers with EBS volume persistence
+              # 3. Pull and run Docker containers with EBS volume persistence (Free Tier PostgreSQL + Vector DB + Backend + App + Monitoring)
+              mkdir -p /data/db/postgres /data/db/vector
+              chmod -R 777 /data/db
+
+              docker pull postgres:15-alpine || true
+              docker rm -f npci-postgres || true
+              docker run -d --name npci-postgres -p 5432:5432 -e POSTGRES_DB=npci_forum -e POSTGRES_USER=npci_user -e POSTGRES_PASSWORD=npci_password -v /data/db/postgres:/var/lib/postgresql/data --restart always postgres:15-alpine || true
+
               docker pull pravinnpci/npci-forum-python-backend:latest || true
               docker rm -f npci-backend || true
               docker run -d --name npci-backend -p 8000:8000 -v /data/db:/data/db --restart always pravinnpci/npci-forum-python-backend:latest || true
