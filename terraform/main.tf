@@ -7,9 +7,11 @@ terraform {
     }
   }
   backend "s3" {
-    bucket = "npci-forum-tfstate-ap-south-2"
-    key    = "state/terraform.tfstate"
-    region = "ap-south-2"
+    bucket                      = "npci-forum-tfstate-ap-south-2"
+    key                         = "state/terraform.tfstate"
+    region                      = "ap-south-2"
+    skip_region_validation      = true
+    skip_credentials_validation = true
   }
 }
 
@@ -234,9 +236,9 @@ resource "aws_volume_attachment" "ebs_att" {
   instance_id = aws_instance.app_server.id
 }
 
-# 9. Lookup Existing Elastic IP (16.112.229.62) and Associate to EC2 Instance
+# 9. Lookup Existing Elastic IP (18.60.110.150) and Associate to EC2 Instance
 data "aws_eip" "existing_eip" {
-  public_ip = "16.112.229.62"
+  public_ip = "18.60.110.150"
 }
 
 resource "aws_eip_association" "eip_assoc" {

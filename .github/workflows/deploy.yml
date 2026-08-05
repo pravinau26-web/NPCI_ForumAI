@@ -39,14 +39,14 @@ jobs:
 
       - name: Ensure Remote Terraform State S3 Bucket Exists
         run: |
-          aws s3api head-bucket --bucket npci-forum-tfstate-ap-south-2 2>/dev/null || \
+          aws s3api head-bucket --bucket npci-forum-tfstate-ap-south-2 --region ${{ secrets.AWS_REGION || 'ap-south-2' }} 2>/dev/null || \
           aws s3api create-bucket --bucket npci-forum-tfstate-ap-south-2 --region ${{ secrets.AWS_REGION || 'ap-south-2' }} --create-bucket-configuration LocationConstraint=${{ secrets.AWS_REGION || 'ap-south-2' }}
 
       - name: Initialize & Apply Terraform Infrastructure
         id: tf_outputs
         run: |
           cd terraform
-          terraform init -reconfigure
+          terraform init -reconfigure -backend-config="region=${{ secrets.AWS_REGION || 'ap-south-2' }}"
           terraform plan -out=tfplan
           terraform apply -auto-approve tfplan
           EC2_IP=$(terraform output -raw ec2_public_ip | tr -d '\r\n')
