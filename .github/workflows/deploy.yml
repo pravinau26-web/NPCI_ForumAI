@@ -184,14 +184,7 @@ jobs:
             mkdir -p ~/.ssh
             echo "${SSH_KEY}" > ~/.ssh/id_rsa
             chmod 600 ~/.ssh/id_rsa
-            cat <<'EOF' > ~/.ssh/config
-Host *
-  StrictHostKeyChecking no
-  UserKnownHostsFile /dev/null
-  ServerAliveInterval 15
-  ServerAliveCountMax 20
-  ConnectTimeout 30
-EOF
+            printf "Host *\n  StrictHostKeyChecking no\n  UserKnownHostsFile /dev/null\n  ServerAliveInterval 15\n  ServerAliveCountMax 20\n  ConnectTimeout 30\n" > ~/.ssh/config
             chmod 600 ~/.ssh/config
             ssh-keyscan -H ${EC2_IP} >> ~/.ssh/known_hosts || true
             ssh-keyscan -H ${MONITORING_IP} >> ~/.ssh/known_hosts || true
@@ -254,14 +247,7 @@ EOF
             mkdir -p ~/.ssh
             echo "${SSH_KEY}" > ~/.ssh/id_rsa
             chmod 600 ~/.ssh/id_rsa
-            cat <<'EOF' > ~/.ssh/config
-Host *
-  StrictHostKeyChecking no
-  UserKnownHostsFile /dev/null
-  ServerAliveInterval 15
-  ServerAliveCountMax 20
-  ConnectTimeout 30
-EOF
+            printf "Host *\n  StrictHostKeyChecking no\n  UserKnownHostsFile /dev/null\n  ServerAliveInterval 15\n  ServerAliveCountMax 20\n  ConnectTimeout 30\n" > ~/.ssh/config
             chmod 600 ~/.ssh/config
             ssh-keyscan -H ${EC2_IP} >> ~/.ssh/known_hosts || true
             
