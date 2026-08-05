@@ -223,16 +223,6 @@ resource "aws_instance" "app_server" {
   }
 }
 
-# 9. Elastic IP for static EC2 IP address
-resource "aws_eip" "app_server_eip" {
-  instance = aws_instance.app_server.id
-  domain   = "vpc"
-
-  tags = {
-    Name = "npci-forum-static-eip"
-  }
-}
-
 resource "aws_volume_attachment" "ebs_att" {
   device_name = "/dev/sdh"
   volume_id   = aws_ebs_volume.data_volume.id
