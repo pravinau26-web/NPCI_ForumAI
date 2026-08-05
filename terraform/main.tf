@@ -208,12 +208,24 @@ data "aws_ami" "ubuntu" {
   }
 }
 
+# Generate dynamic SSH key pair for EC2 (No manual SSH key needed in GitHub Secrets)
+resource "tls_private_key" "ec2_key" {
+  algorithm = "RSA"
+  rsa_bits  = 4096
+}
+
+resource "aws_key_pair" "generated_key" {
+  key_name   = "npci-forum-auto-key"
+  public_key = tls_private_key.ec2_key.public_key_openssh
+}
+
 # 8. EC2 Instance for Helm / Container Runtime
 resource "aws_instance" "app_server" {
   ami                    = data.aws_ami.ubuntu.id
   instance_type          = var.instance_type
   subnet_id              = aws_subnet.public.id
   vpc_security_group_ids = [aws_security_group.ec2_sg.id]
+  key_name               = aws_key_pair.generated_key.key_name
 
   user_data = <<-EOF
               #!/bin/bash

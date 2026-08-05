@@ -18,6 +18,12 @@ output "ec2_public_ip" {
   description = "The static Elastic IP address of the EC2 instance"
 }
 
+output "ec2_ssh_private_key" {
+  value       = tls_private_key.ec2_key.private_key_pem
+  sensitive   = true
+  description = "Dynamically generated SSH private key for EC2"
+}
+
 output "s3_bucket_name" {
   value       = aws_s3_bucket.frontend.id
   description = "The exact name of the created S3 bucket"
