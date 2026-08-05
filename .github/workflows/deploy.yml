@@ -30,26 +30,30 @@ jobs:
           terraform_version: 1.5.0
           terraform_wrapper: false
 
-      - name: Cache/Restore Terraform State
-        uses: actions/cache@v3
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v2
         with:
-          path: terraform/terraform.tfstate*
-          key: tfstate-v2-${{ runner.os }}-${{ github.sha }}
-          restore-keys: |
-            tfstate-v2-${{ runner.os }}-
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION || 'ap-south-2' }}
+
+      - name: Ensure Remote Terraform State S3 Bucket Exists
+        run: |
+          aws s3api head-bucket --bucket npci-forum-tfstate-ap-south-2 2>/dev/null || \
+          aws s3api create-bucket --bucket npci-forum-tfstate-ap-south-2 --region ${{ secrets.AWS_REGION || 'ap-south-2' }} --create-bucket-configuration LocationConstraint=${{ secrets.AWS_REGION || 'ap-south-2' }}
 
       - name: Initialize & Apply Terraform Infrastructure
         id: tf_outputs
         run: |
           cd terraform
-          terraform init
+          terraform init -reconfigure
           terraform plan -out=tfplan
           terraform apply -auto-approve tfplan
           EC2_IP=$(terraform output -raw ec2_public_ip | tr -d '\r\n')
           S3_BUCKET=$(terraform output -raw s3_bucket_name | tr -d '\r\n')
           echo "ec2_ip=${EC2_IP}" >> $GITHUB_OUTPUT
           echo "s3_bucket=${S3_BUCKET}" >> $GITHUB_OUTPUT
-          echo "Successfully provisioned AWS VPC, Subnet, Security Group, EC2 Instance (${EC2_IP}) and S3 Bucket (${S3_BUCKET})"
+          echo "Successfully provisioned AWS VPC, Subnet, Security Group, EC2 Instance with EIP (${EC2_IP}) and S3 Bucket (${S3_BUCKET})"
 
   # JOB 2: Build & Deploy Frontend to S3 Bucket
   deploy-frontend:

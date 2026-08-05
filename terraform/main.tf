@@ -6,6 +6,11 @@ terraform {
       version = "~> 5.0"
     }
   }
+  backend "s3" {
+    bucket = "npci-forum-tfstate-ap-south-2"
+    key    = "state/terraform.tfstate"
+    region = "ap-south-2"
+  }
 }
 
 provider "aws" {
@@ -227,4 +232,14 @@ resource "aws_volume_attachment" "ebs_att" {
   device_name = "/dev/sdh"
   volume_id   = aws_ebs_volume.data_volume.id
   instance_id = aws_instance.app_server.id
+}
+
+# 9. Lookup Existing Elastic IP (16.112.229.62) and Associate to EC2 Instance
+data "aws_eip" "existing_eip" {
+  public_ip = "16.112.229.62"
+}
+
+resource "aws_eip_association" "eip_assoc" {
+  instance_id   = aws_instance.app_server.id
+  allocation_id = data.aws_eip.existing_eip.id
 }
