@@ -131,6 +131,22 @@ resource "aws_security_group" "ec2_sg" {
   }
 
   ingress {
+    description = "MCP Server Port"
+    from_port   = 8001
+    to_port     = 8001
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    description = "PostgreSQL DB Port"
+    from_port   = 5432
+    to_port     = 5432
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
     description = "HTTPS Traffic"
     from_port   = 443
     to_port     = 443
@@ -282,6 +298,10 @@ resource "aws_instance" "app_server" {
               docker pull pravinnpci/npci-forum-python-backend:latest || true
               docker rm -f npci-backend || true
               docker run -d --name npci-backend -p 8000:8000 -v /data/db:/data/db --restart always pravinnpci/npci-forum-python-backend:latest || true
+
+              docker pull pravinnpci/npci-forum-mcp:latest || true
+              docker rm -f npci-mcp || true
+              docker run -d --name npci-mcp -p 8001:8000 -v /data/db:/data/db --restart always pravinnpci/npci-forum-mcp:latest || true
 
               docker pull pravinnpci/npci-forum-app:latest || true
               docker rm -f npci-app || true
