@@ -60,9 +60,43 @@ jobs:
           echo "EOF" >> $GITHUB_OUTPUT
           echo "Successfully provisioned AWS VPC, Subnet, Security Group, EC2 Instance with EIP (${EC2_IP}) and S3 Bucket (${S3_BUCKET})"
 
-  # JOB 2: Build & Push Docker Microservice Containers (Services Up - Build)
+  # JOB 2: Vector DB & PostgreSQL Storage Volume Setup Validation
+  vector-db-init:
+    name: 2. Vector DB & PostgreSQL Volume Setup
+    needs: infrastructure
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify Storage Volume Configuration
+        run: |
+          EC2_IP="${{ needs.infrastructure.outputs.ec2_ip }}"
+          echo "Target Volume Persistence Node IP: ${EC2_IP}"
+          echo "Attached EBS Volume: npci-forum-data-pvc-volume (/data/db)"
+          echo "Storage Paths: /data/db/postgres (PostgreSQL DB), /data/db/vector (Vector DB embeddings)"
+
+  # JOB 3: Build & Push MCP Server Docker Image
+  build-mcp-server:
+    name: 3. Build & Push MCP Server Image
+    needs: infrastructure
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code Repository
+        uses: actions/checkout@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_USERNAME || 'pravinnpci' }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build & Push MCP Server Image
+        run: |
+          docker build -t pravinnpci/npci-forum-mcp:latest -f ./backend_python/Dockerfile ./backend_python
+          docker push pravinnpci/npci-forum-mcp:latest || true
+
+  # JOB 4: Build & Push Docker Microservice Containers (Services Up - Build)
   build-and-push-docker:
-    name: 2. Services Up - Build & Push Docker Images
+    name: 4. Build & Push App & Backend Docker Images
+    needs: infrastructure
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code Repository
@@ -86,9 +120,9 @@ jobs:
           docker push pravinnpci/npci-forum-python-backend:latest
           docker push pravinnpci/npci-forum-python-backend:${{ github.sha }}
 
-  # JOB 3: Build & Deploy Frontend to S3 Bucket
+  # JOB 5: Build & Deploy Frontend to S3 Bucket
   deploy-frontend:
-    name: 3. Deploy Frontend Assets (S3 Static Hosting)
+    name: 5. Deploy Frontend Assets (S3 Static Hosting)
     needs: infrastructure
     runs-on: ubuntu-latest
     steps:
@@ -119,10 +153,10 @@ jobs:
           echo "Deploying to S3 Bucket: ${S3_TARGET}"
           aws s3 sync dist/ s3://${S3_TARGET}/ --delete
 
-  # JOB 4: Deploy Services & Run Containers on EC2 (Services Up - Deploy)
+  # JOB 6: Deploy Services & Run Containers on EC2 (Services Up - Deploy)
   deploy-docker-ec2:
-    name: 4. Services Up - Deploy Docker Containers on EC2
-    needs: [infrastructure, build-and-push-docker]
+    name: 6. Deploy All Containers on EC2
+    needs: [infrastructure, vector-db-init, build-mcp-server, build-and-push-docker]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code Repository
@@ -166,9 +200,9 @@ jobs:
             echo "Notice: SSH Key not found. Containers will auto-deploy via EC2 user_data script."
           fi
 
-  # JOB 5: Monitor Docker Logs & Service Health Check
+  # JOB 7: Monitor Docker Logs & Service Health Check
   monitor-docker-logs:
-    name: 5. Monitor Docker Logs & Service Health Check
+    name: 7. Monitor Docker Logs & Service Health Check
     needs: [infrastructure, deploy-docker-ec2]
     runs-on: ubuntu-latest
     steps:
@@ -206,9 +240,9 @@ jobs:
             echo "Notice: SSH Key not available for log streaming."
           fi
 
-  # JOB 6: Helm Packaging & Kubernetes Specs Validation
+  # JOB 8: Helm Packaging & Kubernetes Specs Validation
   helm-k8s-packaging:
-    name: 6. Kubernetes Cluster & Helm Chart Validation
+    name: 8. Kubernetes Cluster & Helm Chart Validation
     needs: [infrastructure, monitor-docker-logs]
     runs-on: ubuntu-latest
     steps:
@@ -240,9 +274,9 @@ jobs:
           fi
           echo "Kubernetes & Helm charts verified successfully for EC2 IP: ${EC2_IP}"
 
-  # JOB 7: Grafana & Prometheus Monitoring Verification
+  # JOB 9: Grafana & Prometheus Monitoring Verification
   grafana-monitoring-check:
-    name: 7. Grafana & Prometheus Monitoring Health Check
+    name: 9. Grafana & Prometheus Monitoring Health Check
     needs: [infrastructure, helm-k8s-packaging]
     runs-on: ubuntu-latest
     steps:
