@@ -235,3 +235,13 @@ resource "aws_volume_attachment" "ebs_att" {
   volume_id   = aws_ebs_volume.data_volume.id
   instance_id = aws_instance.app_server.id
 }
+
+# 9. Lookup Existing Elastic IP (16.112.205.103) and Associate to EC2 Instance
+data "aws_eip" "existing_eip" {
+  public_ip = "16.112.205.103"
+}
+
+resource "aws_eip_association" "eip_assoc" {
+  instance_id   = aws_instance.app_server.id
+  allocation_id = data.aws_eip.existing_eip.id
+}
