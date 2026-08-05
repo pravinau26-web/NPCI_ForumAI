@@ -1,7 +1,7 @@
 variable "aws_region" {
   type        = string
-  default     = "us-east-1"
-  description = "AWS region for deployment"
+  default     = "ap-south-2"
+  description = "AWS region for deployment (e.g. ap-south-2 Hyderabad)"
 }
 
 variable "vpc_cidr" {

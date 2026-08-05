@@ -12,7 +12,8 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      AWS_REGION: ${{ secrets.AWS_REGION || 'us-east-1' }}
+      AWS_REGION: ${{ secrets.AWS_REGION || 'ap-south-2' }}
+      TF_VAR_aws_region: ${{ secrets.AWS_REGION || 'ap-south-2' }}
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
       S3_BUCKET_NAME: ${{ secrets.S3_BUCKET_NAME || 'npci-forum-frontend-app-bucket' }}
@@ -54,7 +55,7 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION || 'us-east-1' }}
+          aws-region: ${{ secrets.AWS_REGION || 'ap-south-2' }}
 
       - name: Sync Frontend Assets to S3 Bucket
         run: |
