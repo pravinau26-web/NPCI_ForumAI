@@ -279,29 +279,8 @@ resource "aws_instance" "app_server" {
               docker pull pravinnpci/npci-forum-app:latest || true
               docker rm -f npci-app || true
               docker run -d --name npci-app -p 3000:3000 -v /data/db:/data/db --restart always pravinnpci/npci-forum-app:latest || true
-              EOF
 
-  tags = {
-    Name = "npci-forum-ec2-instance"
-  }
-}
-
-# 10. Dedicated Grafana & Prometheus Monitoring EC2 Instance
-resource "aws_instance" "grafana_monitoring" {
-  ami                    = data.aws_ami.ubuntu.id
-  instance_type          = "t3.micro"
-  subnet_id              = aws_subnet.public.id
-  vpc_security_group_ids = [aws_security_group.ec2_sg.id]
-  key_name               = aws_key_pair.generated_key.key_name
-
-  user_data = <<-EOF
-              #!/bin/bash
-              apt-get update -y
-              apt-get install -y docker.io curl
-              systemctl start docker
-              systemctl enable docker
-
-              # Run Prometheus
+              # 4. Setup Prometheus & Grafana Monitoring on Elastic IP (16.112.205.103)
               mkdir -p /etc/prometheus
               cat <<'PROM' > /etc/prometheus/prometheus.yml
 global:
@@ -310,19 +289,18 @@ global:
 scrape_configs:
   - job_name: 'npci_forum_app'
     static_configs:
-      - targets: ['${data.aws_eip.existing_eip.public_ip}:3000', '${data.aws_eip.existing_eip.public_ip}:8000']
+      - targets: ['localhost:3000', 'localhost:8000']
 PROM
 
               docker rm -f prometheus || true
-              docker run -d --name prometheus -p 9090:9090 -v /etc/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml --restart always prom/prometheus:latest
+              docker run -d --name prometheus -p 9090:9090 -v /etc/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml --restart always prom/prometheus:latest || true
 
-              # Run Grafana Server
               docker rm -f grafana || true
-              docker run -d --name grafana -p 3001:3000 -e "GF_SECURITY_ADMIN_PASSWORD=admin" -e "GF_USERS_ALLOW_SIGN_UP=false" --restart always grafana/grafana:latest
+              docker run -d --name grafana -p 3001:3000 -e "GF_SECURITY_ADMIN_PASSWORD=admin" -e "GF_USERS_ALLOW_SIGN_UP=false" --restart always grafana/grafana:latest || true
               EOF
 
   tags = {
-    Name = "npci-forum-grafana-monitoring-server"
+    Name = "npci-forum-ec2-instance"
   }
 }
 
