@@ -238,7 +238,19 @@ scrape_configs:
             ssh -o StrictHostKeyChecking=no ubuntu@${EC2_IP} "sudo docker logs --tail 50 npci-app 2>&1" || true
             
             echo "==================== LOGS: NPCI-BACKEND CONTAINER ===================="
-            ssh -o StrictHostKeyChecking=no ubuntu@${EC2_IP} "sudo docker logs --tail 50 npci-backend 2>&1" || true
+            ssh -o StrictHostKeyChecking=no ubuntu@${EC2_IP} "sudo docker logs --tail 30 npci-backend 2>&1" || true
+
+            echo "==================== LOGS: NPCI-MCP SERVER ===================="
+            ssh -o StrictHostKeyChecking=no ubuntu@${EC2_IP} "sudo docker logs --tail 30 npci-mcp 2>&1" || true
+
+            echo "==================== LOGS: POSTGRES DB ===================="
+            ssh -o StrictHostKeyChecking=no ubuntu@${EC2_IP} "sudo docker logs --tail 30 npci-postgres 2>&1" || true
+
+            echo "==================== LOGS: PROMETHEUS ===================="
+            ssh -o StrictHostKeyChecking=no ubuntu@${EC2_IP} "sudo docker logs --tail 30 prometheus 2>&1" || true
+
+            echo "==================== LOGS: GRAFANA ===================="
+            ssh -o StrictHostKeyChecking=no ubuntu@${EC2_IP} "sudo docker logs --tail 30 grafana 2>&1" || true
             
             echo "==================== HTTP HEALTH CHECK ===================="
             echo "Testing Node.js Web App on http://${EC2_IP}:3000 ..."
