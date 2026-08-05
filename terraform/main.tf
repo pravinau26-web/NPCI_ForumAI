@@ -115,8 +115,14 @@ resource "aws_security_group" "ec2_sg" {
 }
 
 # 6. S3 Bucket for Frontend Hosting and Document Storage
+resource "random_string" "bucket_suffix" {
+  length  = 8
+  special = false
+  upper   = false
+}
+
 resource "aws_s3_bucket" "frontend" {
-  bucket        = var.s3_bucket_name
+  bucket        = "${var.s3_bucket_name}-${random_string.bucket_suffix.result}"
   force_destroy = true
 
   tags = {
