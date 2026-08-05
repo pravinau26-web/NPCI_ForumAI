@@ -288,20 +288,23 @@ resource "aws_instance" "app_server" {
               docker run -d --name npci-app -p 3000:3000 -v /data/db:/data/db --restart always pravinnpci/npci-forum-app:latest || true
 
               # 4. Setup Prometheus & Grafana Monitoring on Elastic IP (16.112.205.103)
+              rm -rf /etc/prometheus/prometheus.yml
               mkdir -p /etc/prometheus
               cat <<'PROM' > /etc/prometheus/prometheus.yml
 global:
   scrape_interval: 15s
 
 scrape_configs:
-  - job_name: 'npci_forum_app'
+  - job_name: 'npci_forum_services'
     static_configs:
-      - targets: ['localhost:3000', 'localhost:8000']
+      - targets: ['localhost:3000', 'localhost:8000', 'localhost:5432']
 PROM
 
+              docker pull prom/prometheus:latest || true
               docker rm -f prometheus || true
               docker run -d --name prometheus -p 9090:9090 -v /etc/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml --restart always prom/prometheus:latest || true
 
+              docker pull grafana/grafana:latest || true
               docker rm -f grafana || true
               docker run -d --name grafana -p 3001:3000 -e "GF_SECURITY_ADMIN_PASSWORD=admin" -e "GF_USERS_ALLOW_SIGN_UP=false" --restart always grafana/grafana:latest || true
               EOF

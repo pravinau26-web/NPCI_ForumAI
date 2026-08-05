@@ -179,12 +179,22 @@ jobs:
             ssh-keyscan -H ${EC2_IP} >> ~/.ssh/known_hosts || true
             ssh -o StrictHostKeyChecking=no ubuntu@${EC2_IP} "
               sudo mkdir -p /data/db/postgres /data/db/vector && sudo chmod -R 777 /data/db && \
+              sudo rm -rf /etc/prometheus/prometheus.yml && sudo mkdir -p /etc/prometheus && \
+              echo \"global:
+  scrape_interval: 15s
+scrape_configs:
+  - job_name: 'npci_forum_services'
+    static_configs:
+      - targets: ['localhost:3000', 'localhost:8000', 'localhost:5432']\" | sudo tee /etc/prometheus/prometheus.yml && \
               sudo docker pull postgres:15-alpine || true && \
               sudo docker rm -f npci-postgres || true && \
               sudo docker run -d --name npci-postgres -p 5432:5432 -e POSTGRES_DB=npci_forum -e POSTGRES_USER=npci_user -e POSTGRES_PASSWORD=npci_password -v /data/db/postgres:/var/lib/postgresql/data --restart always postgres:15-alpine || true && \
               sudo docker pull pravinnpci/npci-forum-python-backend:latest && \
               sudo docker rm -f npci-backend || true && \
               sudo docker run -d --name npci-backend -p 8000:8000 -v /data/db:/data/db --restart always pravinnpci/npci-forum-python-backend:latest && \
+              sudo docker pull pravinnpci/npci-forum-mcp:latest || true && \
+              sudo docker rm -f npci-mcp || true && \
+              sudo docker run -d --name npci-mcp -p 8001:8000 -v /data/db:/data/db --restart always pravinnpci/npci-forum-mcp:latest || true && \
               sudo docker pull pravinnpci/npci-forum-app:latest && \
               sudo docker rm -f npci-app || true && \
               sudo docker run -d --name npci-app -p 3000:3000 -v /data/db:/data/db --restart always pravinnpci/npci-forum-app:latest && \
