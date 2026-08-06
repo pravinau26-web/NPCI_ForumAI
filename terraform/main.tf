@@ -230,7 +230,7 @@ resource "aws_s3_bucket_website_configuration" "frontend_website" {
 }
 
 # 7. EBS Volume Creation for K8s PVC / Persistent Storage
-resource "aws_ebs_volume" "data_volume" {
+resource "aws_ebs_volume" "data_volume_v2" {
   availability_zone = data.aws_availability_zones.available.names[0]
   size              = 10
   type              = "gp3"
@@ -381,7 +381,7 @@ GRAF
 
 resource "aws_volume_attachment" "ebs_att" {
   device_name = "/dev/sdh"
-  volume_id   = aws_ebs_volume.data_volume.id
+  volume_id   = aws_ebs_volume.data_volume_v2.id
   instance_id = aws_instance.app_server.id
 }
 
