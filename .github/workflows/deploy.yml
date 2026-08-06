@@ -100,6 +100,9 @@ jobs:
     needs: [infrastructure, build-and-push-app]
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout Code Repository
+        uses: actions/checkout@v4
+
       - name: Deploy Core Services to 1st EC2 Node
         run: |
           EC2_IP="${{ needs.infrastructure.outputs.ec2_ip }}"
@@ -119,15 +122,16 @@ jobs:
 
             echo "Deploying Core App Services to 1st EC2 Node (${EC2_IP})..."
             ssh -o ServerAliveInterval=15 -o ServerAliveCountMax=20 ubuntu@${EC2_IP} "
+              grep -q '127.0.0.1 \$(hostname)' /etc/hosts || echo '127.0.0.1 \$(hostname)' | sudo tee -a /etc/hosts || true
               sudo docker system prune -af --volumes || true
               sudo mkdir -p /data/db/postgres /data/db/uploads && sudo chmod -R 777 /data/db && \
               sudo docker rm -f npci-postgres npci-backend npci-app || true && \
               sudo docker pull postgres:15-alpine || true && \
               sudo docker run -d --name npci-postgres -p 5432:5432 -e POSTGRES_DB=npci_forum -e POSTGRES_USER=npci_user -e POSTGRES_PASSWORD=npci_password -v /data/db/postgres:/var/lib/postgresql/data --restart always postgres:15-alpine || true && \
               sudo docker pull pravinnpci/npci-forum-python-backend:latest || true && \
-              sudo docker run -d --name npci-backend -p 8000:8000 -v /data/db:/data/db --restart always pravinnpci/npci-forum-python-backend:latest || true && \
+              sudo docker run -d --name npci-backend -p 8000:8000 -e SERVICE_NAME='NPCI Forum Python Backend Engine' -v /data/db:/data/db --restart always pravinnpci/npci-forum-python-backend:latest || true && \
               sudo docker pull pravinnpci/npci-forum-app:latest || true && \
-              sudo docker run -d --name npci-app -p 3000:3000 -v /data/db:/data/db --restart always pravinnpci/npci-forum-app:latest || true
+              sudo docker run -d --name npci-app -p 3000:3000 -e PYTHON_BACKEND_URL=http://localhost:8000 -v /data/db:/data/db --restart always pravinnpci/npci-forum-app:latest || true
             "
             echo "Successfully deployed Core App Services (Frontend, Backend, PostgreSQL DB) to 1st EC2 Node"
           else
@@ -204,6 +208,9 @@ jobs:
     needs: [infrastructure, build-mcp-server]
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout Code Repository
+        uses: actions/checkout@v4
+
       - name: Deploy MCP, Vector DB & Prometheus/Grafana to 2nd EC2 Node
         run: |
           EC2_IP="${{ needs.infrastructure.outputs.ec2_ip }}"
@@ -225,19 +232,24 @@ jobs:
             chmod 600 ~/.ssh/config
             ssh-keyscan -H ${MONITORING_IP} >> ~/.ssh/known_hosts || true
 
+            echo "Transferring Grafana Dashboard JSON to 2nd EC2..."
+            scp monitoring/grafana/dashboards/npci_overview.json ubuntu@${MONITORING_IP}:/tmp/npci_overview.json || true
+
             echo "Deploying MCP, Vector DB, Prometheus & Grafana to 2nd EC2 Node (${MONITORING_IP})..."
             ssh -o ServerAliveInterval=15 -o ServerAliveCountMax=20 ubuntu@${MONITORING_IP} "
+              grep -q '127.0.0.1 \$(hostname)' /etc/hosts || echo '127.0.0.1 \$(hostname)' | sudo tee -a /etc/hosts || true
               which docker || (sudo apt-get update -y && sudo apt-get install -y docker.io && sudo systemctl start docker && sudo systemctl enable docker && sudo usermod -aG docker ubuntu)
               until sudo docker info >/dev/null 2>&1; do sleep 2; done
               sudo docker system prune -af --volumes || true
               sudo mkdir -p /data/vector /etc/prometheus /etc/grafana/provisioning/datasources /etc/grafana/provisioning/dashboards && sudo chmod -R 777 /data/vector && \
+              if [ -f /tmp/npci_overview.json ]; then sudo cp /tmp/npci_overview.json /etc/grafana/provisioning/dashboards/npci_overview.json; fi && \
               sudo docker rm -f npci-vector-db npci-mcp prometheus grafana || true && \
               sudo docker pull qdrant/qdrant:latest || true && \
               sudo docker run -d --name npci-vector-db -p 6333:6333 -v /data/vector:/qdrant/storage --restart always qdrant/qdrant:latest || true && \
               sudo docker pull pravinnpci/npci-forum-mcp:latest || true && \
-              sudo docker run -d --name npci-mcp -p 8001:8000 -v /data/vector:/data/vector --restart always pravinnpci/npci-forum-mcp:latest || true && \
+              sudo docker run -d --name npci-mcp -p 8001:8000 -e SERVICE_NAME='NPCI Forum MCP Vector Engine' -v /data/vector:/data/vector --restart always pravinnpci/npci-forum-mcp:latest || true && \
               sudo rm -rf /etc/prometheus/prometheus.yml && \
-              printf \"global:\n  scrape_interval: 10s\nscrape_configs:\n  - job_name: 'npci_python_backend'\n    metrics_path: '/metrics'\n    static_configs:\n      - targets: ['${EC2_IP}:8000']\n  - job_name: 'npci_mcp_server'\n    metrics_path: '/metrics'\n    static_configs:\n      - targets: ['${MONITORING_IP}:8001']\n  - job_name: 'npci_web_app'\n    metrics_path: '/api/health'\n    static_configs:\n      - targets: ['${EC2_IP}:3000']\n\" | sudo tee /etc/prometheus/prometheus.yml && \
+              printf \"global:\n  scrape_interval: 10s\nscrape_configs:\n  - job_name: 'npci_python_backend'\n    metrics_path: '/metrics'\n    static_configs:\n      - targets: ['${EC2_IP}:8000']\n  - job_name: 'npci_mcp_server'\n    metrics_path: '/metrics'\n    static_configs:\n      - targets: ['${MONITORING_IP}:8001']\n  - job_name: 'npci_web_app'\n    metrics_path: '/metrics'\n    static_configs:\n      - targets: ['${EC2_IP}:3000']\n  - job_name: 'npci_vector_db'\n    metrics_path: '/metrics'\n    static_configs:\n      - targets: ['${MONITORING_IP}:6333']\n\" | sudo tee /etc/prometheus/prometheus.yml && \
               sudo docker pull prom/prometheus:latest || true && \
               sudo docker run -d --name prometheus -p 9090:9090 -v /etc/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml --restart always prom/prometheus:latest || true && \
               printf \"apiVersion: 1\ndatasources:\n  - name: Prometheus\n    type: prometheus\n    access: proxy\n    url: http://prometheus:9090\n    isDefault: true\n\" | sudo tee /etc/grafana/provisioning/datasources/prometheus.yaml && \
@@ -245,7 +257,7 @@ jobs:
               sudo docker pull grafana/grafana:latest || true && \
               sudo docker run -d --name grafana -p 3001:3000 -e 'GF_SECURITY_ADMIN_PASSWORD=admin' -e 'GF_USERS_ALLOW_SIGN_UP=false' -v /etc/grafana/provisioning:/etc/grafana/provisioning --restart always grafana/grafana:latest || true
             "
-            echo "Successfully deployed MCP, Vector DB & Monitoring to 2nd EC2 Node"
+            echo "Successfully deployed MCP, Vector DB & Monitoring with provisioned Grafana Dashboard to 2nd EC2 Node"
           else
             echo "Notice: SSH Key not found. Containers will auto-deploy via EC2 user_data scripts."
           fi

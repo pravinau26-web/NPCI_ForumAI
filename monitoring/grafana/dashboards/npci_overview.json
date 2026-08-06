@@ -9,9 +9,9 @@
   "panels": [
     {
       "collapsed": false,
-      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 0 },
+      "gridPos": { "h": 5, "w": 6, "x": 0, "y": 0 },
       "id": 1,
-      "title": "K8s Pods & Docker Container Status",
+      "title": "1st EC2 & 2nd EC2 Services Health",
       "type": "stat",
       "targets": [
         {
@@ -30,14 +30,14 @@
     },
     {
       "collapsed": false,
-      "gridPos": { "h": 6, "w": 6, "x": 6, "y": 0 },
+      "gridPos": { "h": 5, "w": 6, "x": 6, "y": 0 },
       "id": 2,
-      "title": "PostgreSQL DB & API Requests Rate",
+      "title": "K8s Pods & Docker Containers",
       "type": "stat",
       "targets": [
         {
-          "expr": "npci_backend_requests_total",
-          "legendFormat": "Requests",
+          "expr": "npci_k8s_pods_count",
+          "legendFormat": "Active Containers",
           "refId": "A"
         }
       ],
@@ -49,14 +49,14 @@
     },
     {
       "collapsed": false,
-      "gridPos": { "h": 6, "w": 6, "x": 12, "y": 0 },
+      "gridPos": { "h": 5, "w": 6, "x": 12, "y": 0 },
       "id": 3,
-      "title": "MCP Server Vector RAG Queries",
+      "title": "Registered Users (PostgreSQL DB)",
       "type": "stat",
       "targets": [
         {
-          "expr": "npci_backend_traces_total",
-          "legendFormat": "RAG Traces",
+          "expr": "npci_users_total or npci_web_app_users_total",
+          "legendFormat": "Users",
           "refId": "A"
         }
       ],
@@ -68,9 +68,9 @@
     },
     {
       "collapsed": false,
-      "gridPos": { "h": 6, "w": 6, "x": 18, "y": 0 },
+      "gridPos": { "h": 5, "w": 6, "x": 18, "y": 0 },
       "id": 4,
-      "title": "AI Execution Estimated Cost (USD)",
+      "title": "AI Execution Cost (USD)",
       "type": "stat",
       "targets": [
         {
@@ -87,9 +87,71 @@
     },
     {
       "collapsed": false,
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
+      "gridPos": { "h": 5, "w": 8, "x": 0, "y": 5 },
       "id": 5,
-      "title": "Live Service Traffic & Health Metrics",
+      "title": "MCP Vector Server & RAG Traces",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "npci_backend_traces_total",
+          "legendFormat": "RAG Traces",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }
+      }
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 5, "w": 8, "x": 8, "y": 5 },
+      "id": 6,
+      "title": "Forum Activity (Threads & Communities)",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "npci_web_app_threads_total",
+          "legendFormat": "Threads",
+          "refId": "A"
+        },
+        {
+          "expr": "npci_web_app_communities_total",
+          "legendFormat": "Communities",
+          "refId": "B"
+        }
+      ],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }
+      }
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 5, "w": 8, "x": 16, "y": 5 },
+      "id": 7,
+      "title": "Total API Requests Processed",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "npci_backend_requests_total",
+          "legendFormat": "Requests",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }
+      }
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 10 },
+      "id": 8,
+      "title": "Microservice Uptime & Scrape Status",
       "type": "timeseries",
       "targets": [
         {
@@ -101,15 +163,20 @@
     },
     {
       "collapsed": false,
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 },
-      "id": 6,
-      "title": "AI Agent & RAG Query Latency Traces",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 10 },
+      "id": 9,
+      "title": "API Request Rate & RAG Traces Over Time",
       "type": "timeseries",
       "targets": [
         {
           "expr": "npci_backend_requests_total",
           "legendFormat": "API Rate",
           "refId": "A"
+        },
+        {
+          "expr": "npci_backend_traces_total",
+          "legendFormat": "RAG Traces",
+          "refId": "B"
         }
       ]
     }
@@ -117,7 +184,7 @@
   "refresh": "5s",
   "schemaVersion": 38,
   "style": "dark",
-  "tags": ["npci", "kubernetes", "mcp", "ai", "prometheus"],
+  "tags": ["npci", "kubernetes", "mcp", "ai", "prometheus", "postgres"],
   "time": { "from": "now-15m", "to": "now" },
   "timepicker": {},
   "timezone": "browser",

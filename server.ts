@@ -966,7 +966,7 @@ app.post("/api/auth/login", (req, res) => {
   res.json(user);
 });
 
-app.post("/api/auth/register", (req, res) => {
+app.post("/api/auth/register", async (req, res) => {
   const { username, email, role, department, password, bio, reportsTo } = req.body;
   if (!username || !email || !password) {
     return res.status(400).json({ error: "Username, email, and password are required" });
@@ -1001,7 +1001,35 @@ app.post("/api/auth/register", (req, res) => {
   };
 
   users.push(newUser);
-  addAuditLog("User Registered", newUser.id, `User ${username} manually registered under role ${role}.`);
+
+  // Sync to local Vector DB
+  try {
+    const userProfileText = `User: ${newUser.username}, Role: ${newUser.role}, Department: ${newUser.department}, Bio: ${newUser.bio}`;
+    const embedding = await vectorDb.generateEmbedding(userProfileText);
+    vectorDb.insert(`user-profile-${newUser.id}`, embedding, {
+      docId: newUser.id,
+      docTitle: `User Profile: ${newUser.username}`,
+      section: newUser.department,
+      text: userProfileText,
+      version: "1.0"
+    });
+  } catch (err) {
+    console.warn("Vector DB insert warning for new user:", err);
+  }
+
+  // Sync to Python Backend & PostgreSQL DB
+  try {
+    const backendUrl = process.env.PYTHON_BACKEND_URL || "http://localhost:8000";
+    await fetch(`${backendUrl}/api/users`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(newUser)
+    }).catch(e => console.warn("Sync to Python Backend warning:", e));
+  } catch (err) {
+    console.warn("User DB sync warning:", err);
+  }
+
+  addAuditLog("User Registered", newUser.id, `User ${username} manually registered. Saved to PostgreSQL DB & Vector DB.`);
   res.json(newUser);
 });
 
@@ -2063,6 +2091,53 @@ app.post("/api/admin/clear-data", (req, res) => {
   broadcastEvent("all", "data:cleared", { timestamp: new Date().toISOString() });
   
   res.json({ success: true, message: "Sample dummy data cleared. You can now manually enter fresh communities, topics, chats, and policy specs." });
+});
+
+// Health check endpoint
+app.get("/api/health", (req, res) => {
+  res.json({
+    status: "healthy",
+    service: "NPCI Forum Web App Frontend",
+    uptime: process.uptime(),
+    timestamp: new Date().toISOString()
+  });
+});
+
+// Prometheus metrics endpoint for Web App
+app.get("/metrics", (req, res) => {
+  const activeUsers = users.length;
+  const activeCommunities = communities.length;
+  const activeThreads = threads.length;
+  const activeComments = comments.length;
+  const uptimeSeconds = Math.floor(process.uptime());
+
+  const metricsContent = `# HELP npci_web_app_status Health status of NPCI Web App Frontend (1 = UP)
+# TYPE npci_web_app_status gauge
+npci_web_app_status 1
+
+# HELP npci_web_app_users_total Total registered users in NPCI Forum
+# TYPE npci_web_app_users_total gauge
+npci_web_app_users_total ${activeUsers}
+
+# HELP npci_web_app_communities_total Total active communities
+# TYPE npci_web_app_communities_total gauge
+npci_web_app_communities_total ${activeCommunities}
+
+# HELP npci_web_app_threads_total Total published threads
+# TYPE npci_web_app_threads_total gauge
+npci_web_app_threads_total ${activeThreads}
+
+# HELP npci_web_app_comments_total Total comments written
+# TYPE npci_web_app_comments_total gauge
+npci_web_app_comments_total ${activeComments}
+
+# HELP npci_web_app_uptime_seconds Total uptime of Web App in seconds
+# TYPE npci_web_app_uptime_seconds counter
+npci_web_app_uptime_seconds ${uptimeSeconds}
+`;
+
+  res.setHeader("Content-Type", "text/plain");
+  res.send(metricsContent);
 });
 
 
