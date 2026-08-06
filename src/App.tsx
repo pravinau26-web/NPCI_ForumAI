@@ -333,7 +333,7 @@ export default function App() {
     const bootstrap = async () => {
       try {
         const [usersRes, commRes, policiesRes, notifRes, logsRes] = await Promise.all([
-          fetch("/api/users"),
+          fetch("/api/users", { headers: { "x-user-id": currentUser.id } }),
           fetch("/api/communities"),
           fetch("/api/policies"),
           fetch(`/api/notifications?userId=${currentUser.id}`),
@@ -669,11 +669,14 @@ export default function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ senderId: currentUser.id, content, attachments }),
       });
-      const data = await res.json();
-      setChatMessages(prev => {
-        if (prev.some(m => m.id === data.id)) return prev;
-        return [...prev, data];
-      });
+      await res.json();
+
+      // Refetch all messages in active chat to load user message and grounded AI response instantly
+      const msgsRes = await fetch(`/api/chats/${activeChatId}/messages`);
+      if (msgsRes.ok) {
+        const updatedMsgs = await msgsRes.json();
+        setChatMessages(updatedMsgs);
+      }
     } catch (err) {
       console.error(err);
     } finally {

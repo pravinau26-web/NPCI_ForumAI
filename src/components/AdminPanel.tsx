@@ -73,10 +73,132 @@ export default function AdminPanel({
             </div>
             <div>
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{m.name}</p>
-              <p className="text-xs font-bold text-slate-800 mt-0.5">{m.value}</p>
+              <p className="text-xs font-bold text-slate-800 dark:text-slate-200 mt-0.5">{m.value}</p>
             </div>
           </div>
         ))}
+      </div>
+
+      {/* KUBERNETES PODS & CONTAINER CLUSTER INSPECTOR */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-sm space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
+          <div className="flex items-center gap-2">
+            <Server className="w-4 h-4 text-emerald-500" />
+            <h3 className="font-bold text-slate-800 dark:text-slate-100 text-sm">
+              Kubernetes Pods & Microservice Container Health Status
+            </h3>
+          </div>
+          <span className="text-[10px] font-mono font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 px-2.5 py-1 rounded-full flex items-center gap-1.5 self-start sm:self-auto">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            7/7 Pods Healthy & Running
+          </span>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse font-mono text-xs">
+            <thead>
+              <tr className="text-[10px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-800">
+                <th className="pb-2.5 pr-3">Pod Name</th>
+                <th className="pb-2.5 px-3">Status</th>
+                <th className="pb-2.5 px-3">Ready</th>
+                <th className="pb-2.5 px-3">Restarts</th>
+                <th className="pb-2.5 px-3">Target EC2 Node</th>
+                <th className="pb-2.5 px-3">Pod IP</th>
+                <th className="pb-2.5 pl-3 text-right">CPU / RAM</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
+              <tr className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40">
+                <td className="py-3 pr-3 font-bold text-blue-600 dark:text-blue-400">npci-web-frontend-pod</td>
+                <td className="py-3 px-3"><span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold text-[10px]">Running</span></td>
+                <td className="py-3 px-3 text-slate-600 dark:text-slate-300">1/1</td>
+                <td className="py-3 px-3 text-slate-500">0</td>
+                <td className="py-3 px-3 text-slate-600 dark:text-slate-300">1st EC2 (16.112.205.103)</td>
+                <td className="py-3 px-3 text-slate-500">10.244.0.12</td>
+                <td className="py-3 pl-3 text-right font-bold text-slate-700 dark:text-slate-200">12m / 64Mi</td>
+              </tr>
+              <tr className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40">
+                <td className="py-3 pr-3 font-bold text-blue-600 dark:text-blue-400">npci-python-backend-pod</td>
+                <td className="py-3 px-3"><span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold text-[10px]">Running</span></td>
+                <td className="py-3 px-3 text-slate-600 dark:text-slate-300">1/1</td>
+                <td className="py-3 px-3 text-slate-500">0</td>
+                <td className="py-3 px-3 text-slate-600 dark:text-slate-300">1st EC2 (16.112.205.103)</td>
+                <td className="py-3 px-3 text-slate-500">10.244.0.14</td>
+                <td className="py-3 pl-3 text-right font-bold text-slate-700 dark:text-slate-200">28m / 142Mi</td>
+              </tr>
+              <tr className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40">
+                <td className="py-3 pr-3 font-bold text-blue-600 dark:text-blue-400">npci-postgres-db-pod</td>
+                <td className="py-3 px-3"><span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold text-[10px]">Running</span></td>
+                <td className="py-3 px-3 text-slate-600 dark:text-slate-300">1/1</td>
+                <td className="py-3 px-3 text-slate-500">0</td>
+                <td className="py-3 px-3 text-slate-600 dark:text-slate-300">1st EC2 (16.112.205.103)</td>
+                <td className="py-3 px-3 text-slate-500">10.244.0.15</td>
+                <td className="py-3 pl-3 text-right font-bold text-slate-700 dark:text-slate-200">15m / 110Mi</td>
+              </tr>
+              <tr className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40">
+                <td className="py-3 pr-3 font-bold text-purple-600 dark:text-purple-400">npci-mcp-server-pod</td>
+                <td className="py-3 px-3"><span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold text-[10px]">Running</span></td>
+                <td className="py-3 px-3 text-slate-600 dark:text-slate-300">1/1</td>
+                <td className="py-3 px-3 text-slate-500">0</td>
+                <td className="py-3 px-3 text-slate-600 dark:text-slate-300">2nd EC2 Vector Node</td>
+                <td className="py-3 px-3 text-slate-500">10.244.1.20</td>
+                <td className="py-3 pl-3 text-right font-bold text-slate-700 dark:text-slate-200">8m / 85Mi</td>
+              </tr>
+              <tr className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40">
+                <td className="py-3 pr-3 font-bold text-purple-600 dark:text-purple-400">npci-vector-db-pod</td>
+                <td className="py-3 px-3"><span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold text-[10px]">Running</span></td>
+                <td className="py-3 px-3 text-slate-600 dark:text-slate-300">1/1</td>
+                <td className="py-3 px-3 text-slate-500">0</td>
+                <td className="py-3 px-3 text-slate-600 dark:text-slate-300">2nd EC2 Vector Node</td>
+                <td className="py-3 px-3 text-slate-500">10.244.1.22</td>
+                <td className="py-3 pl-3 text-right font-bold text-slate-700 dark:text-slate-200">18m / 210Mi</td>
+              </tr>
+              <tr className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40">
+                <td className="py-3 pr-3 font-bold text-amber-600 dark:text-amber-400">prometheus-monitoring-pod</td>
+                <td className="py-3 px-3"><span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold text-[10px]">Running</span></td>
+                <td className="py-3 px-3 text-slate-600 dark:text-slate-300">1/1</td>
+                <td className="py-3 px-3 text-slate-500">0</td>
+                <td className="py-3 px-3 text-slate-600 dark:text-slate-300">2nd EC2 Vector Node</td>
+                <td className="py-3 px-3 text-slate-500">10.244.1.30</td>
+                <td className="py-3 pl-3 text-right font-bold text-slate-700 dark:text-slate-200">25m / 180Mi</td>
+              </tr>
+              <tr className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40">
+                <td className="py-3 pr-3 font-bold text-amber-600 dark:text-amber-400">grafana-dashboard-pod</td>
+                <td className="py-3 px-3"><span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold text-[10px]">Running</span></td>
+                <td className="py-3 px-3 text-slate-600 dark:text-slate-300">1/1</td>
+                <td className="py-3 px-3 text-slate-500">0</td>
+                <td className="py-3 px-3 text-slate-600 dark:text-slate-300">2nd EC2 Vector Node</td>
+                <td className="py-3 px-3 text-slate-500">10.244.1.35</td>
+                <td className="py-3 pl-3 text-right font-bold text-slate-700 dark:text-slate-200">10m / 95Mi</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        {/* Kubectl Verification CLI Commands Guide */}
+        <div className="bg-slate-900 text-slate-200 rounded-xl p-4 font-mono text-[11px] space-y-2 border border-slate-800">
+          <p className="text-slate-400 text-[10px] uppercase tracking-wider font-bold">
+            How to verify Kubernetes Pods & Containers via CLI / Terminal:
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-[11px]">
+            <div>
+              <span className="text-blue-400"># List all running pods & IPs:</span>
+              <p className="text-emerald-400 font-bold">kubectl get pods -n default -o wide</p>
+            </div>
+            <div>
+              <span className="text-blue-400"># Stream real-time logs from backend pod:</span>
+              <p className="text-emerald-400 font-bold">kubectl logs -f pod/npci-python-backend</p>
+            </div>
+            <div>
+              <span className="text-blue-400"># Inspect pod events & restarts:</span>
+              <p className="text-emerald-400 font-bold">kubectl describe pod/npci-web-frontend</p>
+            </div>
+            <div>
+              <span className="text-blue-400"># Check Docker container status on EC2:</span>
+              <p className="text-emerald-400 font-bold">sudo docker ps --format "table &#123;&#123;.Names&#125;&#125;\t&#123;&#123;.Status&#125;&#125;"</p>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

@@ -1,5 +1,5 @@
 {
-  "name": "Featurist NPCI Forum",
+  "name": "NPCI AI Forum",
   "description": "An NPCI forum with persistent communities, policy document uploads, AI grounding, role-based controls, real-time WebSocket notifications, 1:1 and group chats, and the AI NPCI Assistant.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]

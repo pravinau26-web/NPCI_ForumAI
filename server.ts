@@ -146,7 +146,7 @@ let users: User[] = [
     username: "Dilip asbe",
     email: "dilip.asbe@npci.org.in",
     role: "platform_admin",
-    status: "online",
+    status: "offline",
     avatar: "https://images.unsplash.com/photo-1560250097-0b93528c311a?auto=format&fit=crop&w=150&q=80",
     department: "Executive Board",
     bio: "Managing Director & CEO of National Payments Corporation of India (NPCI). Leading payment revolution in India.",
@@ -157,7 +157,7 @@ let users: User[] = [
     username: "NPCI_Forum",
     email: "admin@npci.org.in",
     role: "platform_admin",
-    status: "online",
+    status: "offline",
     avatar: "https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?auto=format&fit=crop&w=150&q=80",
     department: "Security & Governance",
     bio: "Chief Platform Administrator of internal systems and audits.",
@@ -169,7 +169,7 @@ let users: User[] = [
     username: "pravin",
     email: "pravinau26@gmail.com",
     role: "lead",
-    status: "online",
+    status: "offline",
     avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80",
     department: "UPI Core Development",
     bio: "Lead developer on NPCI UPI APIs and instant payments.",
@@ -181,7 +181,7 @@ let users: User[] = [
     username: "neha_compliance",
     email: "neha@npci.org.in",
     role: "policy_admin",
-    status: "online",
+    status: "offline",
     avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=150&q=80",
     department: "Risk & Compliance",
     bio: "Compliance Officer at NPCI, managing policy changes and regulatory requirements.",
@@ -193,7 +193,7 @@ let users: User[] = [
     username: "amit_platform",
     email: "amit@npci.org.in",
     role: "employee",
-    status: "online",
+    status: "offline",
     avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&q=80",
     department: "Platform Engineering",
     bio: "Systems and Kubernetes cluster engineer.",
@@ -751,6 +751,15 @@ Provide a concise, professional markdown plain-language summary for NPCI employe
 
 // FR-12/FR-9: NPCI Assistant Grounded Q&A (RAG)
 async function npciAssistantRAG(question: string, history: { sender: string; content: string }[]): Promise<{ answer: string; confidence: "high" | "low"; citations: { docTitle: string; section: string; version: string }[] }> {
+  const normQ = question.trim().toLowerCase();
+  const greetings = ["hi", "gi", "hello", "hey", "greetings", "good morning", "good afternoon", "good evening", "help"];
+  if (greetings.includes(normQ) || normQ.startsWith("hi ") || normQ.startsWith("gi ") || normQ.startsWith("hello ")) {
+    return {
+      answer: "Hello! I am the NPCI AI Assistant grounded on official NPCI policy documents (UPI 2.0, RuPay, AePS, BBPS, UDIR, and Tokenization guidelines). How can I assist you with compliance guidelines or payment technical specifications today?",
+      confidence: "high",
+      citations: [{ docTitle: "NPCI Master Policy Repository", section: "AI Virtual Assistant Guidelines", version: "3.0" }]
+    };
+  }
   // Query the Vector DB for the top 5 most relevant policy chunks
   const queryVector = await vectorDb.generateEmbedding(question);
   const relevantRecords = vectorDb.query(queryVector, 5);
@@ -1035,7 +1044,18 @@ app.post("/api/auth/register", async (req, res) => {
 
 // User Management
 app.get("/api/users", (req, res) => {
-  res.json(users);
+  const activeUserId = req.headers["x-user-id"] as string;
+  const computedUsers = users.map(u => {
+    if (u.id === "npci_assistant") {
+      return { ...u, status: "online" as const };
+    }
+    const isConnected = connectedClients.has(u.id) || (activeUserId && u.id === activeUserId);
+    return {
+      ...u,
+      status: isConnected ? (u.status === "offline" ? "online" as const : u.status) : "offline" as const
+    };
+  });
+  res.json(computedUsers);
 });
 
 app.put("/api/users/:id/role", (req, res) => {

@@ -18,6 +18,7 @@ jobs:
   shutdown-containers:
     name: 1. Stop & Remove Docker Containers (2x EC2 Nodes)
     runs-on: ubuntu-latest
+    timeout-minutes: 3
     steps:
       - name: Checkout Code Repository
         uses: actions/checkout@v4
@@ -38,7 +39,7 @@ jobs:
       - name: Stop Docker Containers via SSH
         run: |
           cd terraform
-          terraform init -reconfigure -backend-config="region=${{ secrets.AWS_REGION || 'ap-south-2' }}" || true
+          timeout 45s terraform init -reconfigure -backend-config="region=${{ secrets.AWS_REGION || 'ap-south-2' }}" || true
           EC2_IP=$(terraform output -raw ec2_public_ip 2>/dev/null | tr -d '\r\n') || true
           MONITORING_IP=$(terraform output -raw monitoring_ec2_public_ip 2>/dev/null | tr -d '\r\n') || true
           EC2_KEY=$(terraform output -raw ec2_ssh_private_key 2>/dev/null) || true
@@ -51,15 +52,15 @@ jobs:
             mkdir -p ~/.ssh
             echo "${EC2_KEY}" > ~/.ssh/id_rsa
             chmod 600 ~/.ssh/id_rsa
-            printf "Host *\n  StrictHostKeyChecking no\n  UserKnownHostsFile /dev/null\n  ServerAliveInterval 15\n  ServerAliveCountMax 20\n  ConnectTimeout 30\n" > ~/.ssh/config
+            printf "Host *\n  StrictHostKeyChecking no\n  UserKnownHostsFile /dev/null\n  ServerAliveInterval 5\n  ServerAliveCountMax 2\n  ConnectTimeout 5\n" > ~/.ssh/config
             chmod 600 ~/.ssh/config
 
             echo "Stopping Docker Containers on Primary App EC2 (${EC2_IP})..."
-            ssh ubuntu@${EC2_IP} "sudo docker stop npci-app npci-backend npci-postgres || true; sudo docker rm -f npci-app npci-backend npci-postgres || true" || true
+            ssh -o ConnectTimeout=5 ubuntu@${EC2_IP} "sudo docker rm -f npci-app npci-backend npci-postgres node-exporter 2>/dev/null || true" || true
 
             if [ -n "${MONITORING_IP}" ]; then
               echo "Stopping Docker Containers on Monitoring & Vector EC2 (${MONITORING_IP})..."
-              ssh ubuntu@${MONITORING_IP} "sudo docker stop npci-mcp npci-vector-db prometheus grafana || true; sudo docker rm -f npci-mcp npci-vector-db prometheus grafana || true" || true
+              ssh -o ConnectTimeout=5 ubuntu@${MONITORING_IP} "sudo docker rm -f npci-mcp npci-vector-db prometheus grafana node-exporter-2 2>/dev/null || true" || true
             fi
             echo "All Docker services stopped successfully."
           else
@@ -71,6 +72,7 @@ jobs:
     name: 2. Terraform Teardown AWS Infrastructure
     needs: shutdown-containers
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - name: Checkout Code Repository
         uses: actions/checkout@v4
@@ -100,3 +102,4 @@ jobs:
             echo "Notice: confirm_destroy was set to '${{ inputs.confirm_destroy }}'. Skipping Terraform destroy."
             echo "Docker containers were stopped. Infrastructure remains available for re-deploy."
           fi
+

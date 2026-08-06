@@ -105,7 +105,7 @@ export default function Header({
             </div>
             <div className="hidden sm:block border-l border-slate-200 dark:border-slate-800 pl-3">
               <div className="font-bold text-base tracking-tight text-slate-900 dark:text-white flex items-center gap-1.5">
-                <span>Featurist Forum</span>
+                <span>NPCI AI Forum</span>
                 <span className="text-[10px] font-semibold bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 border border-blue-100 dark:border-blue-800/50 px-2 py-0.5 rounded-full">
                   AI Powered
                 </span>

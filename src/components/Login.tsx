@@ -307,7 +307,7 @@ export default function Login({ onLoginSuccess, theme, onToggleTheme }: LoginPro
             <NPCILogo size="lg" showText={true} />
             <div className="border-l border-slate-200 dark:border-slate-800 pl-3">
               <h1 className="font-extrabold text-xl tracking-tight text-slate-900 dark:text-white flex items-center gap-1.5">
-                <span>Featurist Forum</span>
+                <span>NPCI AI Forum</span>
                 <span className="text-[10px] font-bold bg-blue-100 dark:bg-indigo-500/20 text-blue-800 dark:text-indigo-300 border border-blue-200 dark:border-indigo-500/30 px-2.5 py-0.5 rounded-full uppercase font-mono">
                   v2.4
                 </span>
