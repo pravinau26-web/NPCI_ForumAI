@@ -122,17 +122,17 @@ jobs:
 
             echo "Deploying Core App Services to 1st EC2 Node (${EC2_IP})..."
             SSH_READY=0
-            for attempt in {1..15}; do
-              if ssh -o ConnectTimeout=5 ubuntu@${EC2_IP} "echo 'SSH Connection Established to 1st EC2'"; then
+            for attempt in {1..30}; do
+              if ssh -o ConnectTimeout=8 ubuntu@${EC2_IP} "echo 'SSH Connection Established to 1st EC2'"; then
                 SSH_READY=1
                 break
               fi
-              echo "Waiting for SSH connection on 1st EC2 (Attempt $attempt/15)..."
-              sleep 3
+              echo "Waiting for SSH connection on 1st EC2 (Attempt $attempt/30)..."
+              sleep 6
             done
 
             if [ "$SSH_READY" -ne 1 ]; then
-              echo "Error: Failed to connect via SSH to 1st EC2 (${EC2_IP}) after 15 attempts."
+              echo "Error: Failed to connect via SSH to 1st EC2 (${EC2_IP}) after 30 attempts."
               exit 1
             fi
 
@@ -268,17 +268,17 @@ jobs:
 
             echo "Deploying MCP, Vector DB, Prometheus & Grafana to 2nd EC2 Node (${MONITORING_IP})..."
             SSH_READY=0
-            for attempt in {1..15}; do
-              if ssh -o ConnectTimeout=5 ubuntu@${MONITORING_IP} "echo 'SSH Connection Established to 2nd EC2'"; then
+            for attempt in {1..30}; do
+              if ssh -o ConnectTimeout=8 ubuntu@${MONITORING_IP} "echo 'SSH Connection Established to 2nd EC2'"; then
                 SSH_READY=1
                 break
               fi
-              echo "Waiting for SSH connection on 2nd EC2 (Attempt $attempt/15)..."
-              sleep 3
+              echo "Waiting for SSH connection on 2nd EC2 (Attempt $attempt/30)..."
+              sleep 6
             done
 
             if [ "$SSH_READY" -ne 1 ]; then
-              echo "Error: Failed to connect via SSH to 2nd EC2 (${MONITORING_IP}) after 15 attempts."
+              echo "Error: Failed to connect via SSH to 2nd EC2 (${MONITORING_IP}) after 30 attempts."
               exit 1
             fi
 
@@ -325,10 +325,6 @@ jobs:
               sudo chmod -R 777 /etc/grafana
               sudo docker pull grafana/grafana:latest || true
               sudo docker run -d --name grafana -p 3001:3000 -e GF_SECURITY_ADMIN_PASSWORD=admin -e GF_USERS_ALLOW_SIGN_UP=false -e GF_SECURITY_ALLOW_EMBEDDING=true -e GF_AUTH_ANONYMOUS_ENABLED=true -e GF_AUTH_ANONYMOUS_ORG_ROLE=Admin -v /etc/grafana/provisioning:/etc/grafana/provisioning --restart always grafana/grafana:latest || true
-
-              echo === [8/8] Cleaning Dangling Images ===
-              sudo docker image prune -f || true
-            "
 
               echo === [8/8] Cleaning Dangling Images ===
               sudo docker image prune -f || true
