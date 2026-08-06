@@ -354,10 +354,21 @@ PROM
               docker rm -f prometheus || true
               docker run -d --name prometheus -p 9090:9090 -v /etc/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml --restart always prom/prometheus:latest || true
 
-              # 3. Setup Grafana Dashboard
+              # 3. Setup Grafana Dashboard with Prometheus Datasource
+              mkdir -p /etc/grafana/provisioning/datasources
+              cat <<'GRAF' > /etc/grafana/provisioning/datasources/prometheus.yaml
+apiVersion: 1
+datasources:
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+GRAF
+
               docker pull grafana/grafana:latest || true
               docker rm -f grafana || true
-              docker run -d --name grafana -p 3001:3000 -e "GF_SECURITY_ADMIN_PASSWORD=admin" -e "GF_USERS_ALLOW_SIGN_UP=false" --restart always grafana/grafana:latest || true
+              docker run -d --name grafana -p 3001:3000 -e "GF_SECURITY_ADMIN_PASSWORD=admin" -e "GF_USERS_ALLOW_SIGN_UP=false" -v /etc/grafana/provisioning:/etc/grafana/provisioning --restart always grafana/grafana:latest || true
               EOF
 
   tags = {

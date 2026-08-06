@@ -65,44 +65,11 @@ jobs:
           echo "ec2_ssh_key<<EOF" >> $GITHUB_OUTPUT
           echo "${EC2_KEY}" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
-          echo "Successfully provisioned AWS 2x EC2 Architecture (App Node: ${EC2_IP}, Monitoring/Vector Node: ${MONITORING_IP}) and S3 Bucket (${S3_BUCKET})"
+          echo "Successfully provisioned AWS 2x EC2 Architecture (1st EC2 App Node: ${EC2_IP}, 2nd EC2 Vector/Monitoring Node: ${MONITORING_IP}) and S3 Bucket (${S3_BUCKET})"
 
-  # JOB 2: Vector DB & PostgreSQL Storage Volume Setup Validation
-  vector-db-init:
-    name: 2. Vector DB & PostgreSQL Volume Setup
-    needs: infrastructure
-    runs-on: ubuntu-latest
-    steps:
-      - name: Verify Storage Volume Configuration
-        run: |
-          EC2_IP="${{ needs.infrastructure.outputs.ec2_ip }}"
-          echo "Target Volume Persistence Node IP: ${EC2_IP}"
-          echo "Attached EBS Volume: npci-forum-data-pvc-volume (/data/db)"
-          echo "Storage Paths: /data/db/postgres (PostgreSQL DB), /data/db/vector (Vector DB embeddings)"
-
-  # JOB 3: Build & Push MCP Server Docker Image
-  build-mcp-server:
-    name: 3. Build & Push MCP Server Image
-    needs: infrastructure
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout Code Repository
-        uses: actions/checkout@v3
-
-      - name: Log in to Docker Hub
-        uses: docker/login-action@v2
-        with:
-          username: ${{ secrets.DOCKER_USERNAME || 'pravinnpci' }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
-
-      - name: Build & Push MCP Server Image
-        run: |
-          docker build -t pravinnpci/npci-forum-mcp:latest -f ./backend_python/Dockerfile ./backend_python
-          docker push pravinnpci/npci-forum-mcp:latest || true
-
-  # JOB 4: Build & Push Docker Microservice Containers (Services Up - Build)
-  build-and-push-docker:
-    name: 4. Build & Push App & Backend Docker Images
+  # JOB 2: Build & Push Core App Docker Microservices (1st EC2)
+  build-and-push-app:
+    name: 2. Build & Push App & Backend Docker Images
     needs: infrastructure
     runs-on: ubuntu-latest
     steps:
@@ -121,15 +88,214 @@ jobs:
           docker push pravinnpci/npci-forum-app:latest
           docker push pravinnpci/npci-forum-app:${{ github.sha }}
 
-      - name: Build & Push Python FastAPI AI Backend Image
+      - name: Build & Push Python FastAPI Backend Image
         run: |
           docker build -t pravinnpci/npci-forum-python-backend:latest -t pravinnpci/npci-forum-python-backend:${{ github.sha }} ./backend_python
           docker push pravinnpci/npci-forum-python-backend:latest
           docker push pravinnpci/npci-forum-python-backend:${{ github.sha }}
 
-  # JOB 5: Build & Deploy Frontend to S3 Bucket
+  # JOB 3: Deploy Core App Services to 1st EC2 (App, Backend, PostgreSQL DB)
+  deploy-core-app-ec2:
+    name: 3. Deploy Core App Services (1st EC2 Node)
+    needs: [infrastructure, build-and-push-app]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy Core Services to 1st EC2 Node
+        run: |
+          EC2_IP="${{ needs.infrastructure.outputs.ec2_ip }}"
+          SSH_KEY="${{ needs.infrastructure.outputs.ec2_ssh_key }}"
+          if [ -z "${SSH_KEY}" ]; then
+            SSH_KEY="${{ secrets.EC2_SSH_KEY }}"
+          fi
+          echo "Target 1st EC2 App Node IP: ${EC2_IP}"
+
+          if [ -n "${SSH_KEY}" ]; then
+            mkdir -p ~/.ssh
+            echo "${SSH_KEY}" > ~/.ssh/id_rsa
+            chmod 600 ~/.ssh/id_rsa
+            printf "Host *\n  StrictHostKeyChecking no\n  UserKnownHostsFile /dev/null\n  ServerAliveInterval 15\n  ServerAliveCountMax 20\n  ConnectTimeout 30\n" > ~/.ssh/config
+            chmod 600 ~/.ssh/config
+            ssh-keyscan -H ${EC2_IP} >> ~/.ssh/known_hosts || true
+
+            echo "Deploying Core App Services to 1st EC2 Node (${EC2_IP})..."
+            ssh -o ServerAliveInterval=15 -o ServerAliveCountMax=20 ubuntu@${EC2_IP} "
+              sudo mkdir -p /data/db/postgres /data/db/uploads && sudo chmod -R 777 /data/db && \
+              sudo docker pull postgres:15-alpine || true && \
+              sudo docker rm -f npci-postgres || true && \
+              sudo docker run -d --name npci-postgres -p 5432:5432 -e POSTGRES_DB=npci_forum -e POSTGRES_USER=npci_user -e POSTGRES_PASSWORD=npci_password -v /data/db/postgres:/var/lib/postgresql/data --restart always postgres:15-alpine || true && \
+              sudo docker pull pravinnpci/npci-forum-python-backend:latest && \
+              sudo docker rm -f npci-backend || true && \
+              sudo docker run -d --name npci-backend -p 8000:8000 -v /data/db:/data/db --restart always pravinnpci/npci-forum-python-backend:latest && \
+              sudo docker pull pravinnpci/npci-forum-app:latest && \
+              sudo docker rm -f npci-app || true && \
+              sudo docker run -d --name npci-app -p 3000:3000 -v /data/db:/data/db --restart always pravinnpci/npci-forum-app:latest
+            "
+            echo "Successfully deployed Core App Services (Frontend, Backend, PostgreSQL DB) to 1st EC2 Node"
+          else
+            echo "Notice: SSH Key not found. Containers will auto-deploy via EC2 user_data scripts."
+          fi
+
+  # JOB 4: Monitor Logs & Service Health Check for 1st EC2
+  monitor-core-app-ec2:
+    name: 4. Monitor Logs & Health Check (1st EC2 Node)
+    needs: [infrastructure, deploy-core-app-ec2]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check 1st EC2 Docker Status and Stream Logs
+        run: |
+          EC2_IP="${{ needs.infrastructure.outputs.ec2_ip }}"
+          SSH_KEY="${{ needs.infrastructure.outputs.ec2_ssh_key }}"
+          if [ -z "${SSH_KEY}" ]; then
+            SSH_KEY="${{ secrets.EC2_SSH_KEY }}"
+          fi
+
+          if [ -n "${SSH_KEY}" ]; then
+            mkdir -p ~/.ssh
+            echo "${SSH_KEY}" > ~/.ssh/id_rsa
+            chmod 600 ~/.ssh/id_rsa
+            printf "Host *\n  StrictHostKeyChecking no\n  UserKnownHostsFile /dev/null\n  ServerAliveInterval 15\n  ServerAliveCountMax 20\n  ConnectTimeout 30\n" > ~/.ssh/config
+            chmod 600 ~/.ssh/config
+            ssh-keyscan -H ${EC2_IP} >> ~/.ssh/known_hosts || true
+
+            echo "==================== 1ST EC2 APP NODE DOCKER STATUS ===================="
+            ssh -o StrictHostKeyChecking=no ubuntu@${EC2_IP} "sudo docker ps -a"
+
+            echo "==================== LOGS: NPCI-APP CONTAINER ===================="
+            ssh -o StrictHostKeyChecking=no ubuntu@${EC2_IP} "sudo docker logs --tail 30 npci-app 2>&1" || true
+
+            echo "==================== LOGS: NPCI-BACKEND CONTAINER ===================="
+            ssh -o StrictHostKeyChecking=no ubuntu@${EC2_IP} "sudo docker logs --tail 30 npci-backend 2>&1" || true
+
+            echo "==================== LOGS: POSTGRES DB ===================="
+            ssh -o StrictHostKeyChecking=no ubuntu@${EC2_IP} "sudo docker logs --tail 30 npci-postgres 2>&1" || true
+
+            echo "==================== HTTP HEALTH CHECK ===================="
+            echo "Testing Node.js Web App on http://${EC2_IP}:3000 ..."
+            curl -I --connect-timeout 5 "http://${EC2_IP}:3000" || echo "Web App starting up..."
+
+            echo "Testing Python AI Backend on http://${EC2_IP}:8000 ..."
+            curl -I --connect-timeout 5 "http://${EC2_IP}:8000/docs" || echo "Backend starting up..."
+          else
+            echo "Notice: SSH Key not available for log streaming."
+          fi
+
+  # JOB 5: Build & Push MCP Server Image
+  build-mcp-server:
+    name: 5. Build & Push MCP Server Image
+    needs: infrastructure
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code Repository
+        uses: actions/checkout@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_USERNAME || 'pravinnpci' }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build & Push MCP Server Image
+        run: |
+          docker build -t pravinnpci/npci-forum-mcp:latest -f ./backend_python/Dockerfile ./backend_python
+          docker push pravinnpci/npci-forum-mcp:latest || true
+
+  # JOB 6: Deploy MCP, Vector DB & Monitoring to 2nd EC2
+  deploy-ai-vector-monitoring-ec2:
+    name: 6. Deploy MCP, Vector DB & Monitoring (2nd EC2 Node)
+    needs: [infrastructure, build-mcp-server]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy MCP, Vector DB & Prometheus/Grafana to 2nd EC2 Node
+        run: |
+          EC2_IP="${{ needs.infrastructure.outputs.ec2_ip }}"
+          MONITORING_IP="${{ needs.infrastructure.outputs.monitoring_ec2_ip }}"
+          if [ -z "${MONITORING_IP}" ]; then
+            MONITORING_IP="${EC2_IP}"
+          fi
+          SSH_KEY="${{ needs.infrastructure.outputs.ec2_ssh_key }}"
+          if [ -z "${SSH_KEY}" ]; then
+            SSH_KEY="${{ secrets.EC2_SSH_KEY }}"
+          fi
+          echo "Target 2nd EC2 Monitoring & Vector Node IP: ${MONITORING_IP}"
+
+          if [ -n "${SSH_KEY}" ]; then
+            mkdir -p ~/.ssh
+            echo "${SSH_KEY}" > ~/.ssh/id_rsa
+            chmod 600 ~/.ssh/id_rsa
+            printf "Host *\n  StrictHostKeyChecking no\n  UserKnownHostsFile /dev/null\n  ServerAliveInterval 15\n  ServerAliveCountMax 20\n  ConnectTimeout 30\n" > ~/.ssh/config
+            chmod 600 ~/.ssh/config
+            ssh-keyscan -H ${MONITORING_IP} >> ~/.ssh/known_hosts || true
+
+            echo "Deploying MCP, Vector DB, Prometheus & Grafana to 2nd EC2 Node (${MONITORING_IP})..."
+            ssh -o ServerAliveInterval=15 -o ServerAliveCountMax=20 ubuntu@${MONITORING_IP} "
+              sudo mkdir -p /data/vector /etc/prometheus /etc/grafana/provisioning/datasources && sudo chmod -R 777 /data/vector && \
+              sudo docker pull qdrant/qdrant:latest || true && \
+              sudo docker rm -f npci-vector-db || true && \
+              sudo docker run -d --name npci-vector-db -p 6333:6333 -v /data/vector:/qdrant/storage --restart always qdrant/qdrant:latest || true && \
+              sudo docker pull pravinnpci/npci-forum-mcp:latest || true && \
+              sudo docker rm -f npci-mcp || true && \
+              sudo docker run -d --name npci-mcp -p 8001:8000 -v /data/vector:/data/vector --restart always pravinnpci/npci-forum-mcp:latest || true && \
+              sudo rm -rf /etc/prometheus/prometheus.yml && \
+              printf \"global:\n  scrape_interval: 15s\nscrape_configs:\n  - job_name: 'npci_forum_services'\n    static_configs:\n      - targets: ['${EC2_IP}:3000', '${EC2_IP}:8000', '${MONITORING_IP}:8001', '${EC2_IP}:5432']\n\" | sudo tee /etc/prometheus/prometheus.yml && \
+              sudo docker pull prom/prometheus:latest || true && \
+              sudo docker rm -f prometheus || true && \
+              sudo docker run -d --name prometheus -p 9090:9090 -v /etc/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml --restart always prom/prometheus:latest || true && \
+              printf \"apiVersion: 1\ndatasources:\n  - name: Prometheus\n    type: prometheus\n    access: proxy\n    url: http://prometheus:9090\n    isDefault: true\n\" | sudo tee /etc/grafana/provisioning/datasources/prometheus.yaml && \
+              sudo docker pull grafana/grafana:latest || true && \
+              sudo docker rm -f grafana || true && \
+              sudo docker run -d --name grafana -p 3001:3000 -e 'GF_SECURITY_ADMIN_PASSWORD=admin' -e 'GF_USERS_ALLOW_SIGN_UP=false' -v /etc/grafana/provisioning:/etc/grafana/provisioning --restart always grafana/grafana:latest || true
+            "
+            echo "Successfully deployed MCP, Vector DB & Monitoring to 2nd EC2 Node"
+          else
+            echo "Notice: SSH Key not found. Containers will auto-deploy via EC2 user_data scripts."
+          fi
+
+  # JOB 7: Monitor Logs & Service Health Check for 2nd EC2
+  monitor-ai-vector-monitoring-ec2:
+    name: 7. Monitor Logs & Health Check (2nd EC2 Node)
+    needs: [infrastructure, deploy-ai-vector-monitoring-ec2]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check 2nd EC2 Docker Status and Stream Logs
+        run: |
+          MONITORING_IP="${{ needs.infrastructure.outputs.monitoring_ec2_ip }}"
+          if [ -z "${MONITORING_IP}" ]; then
+            MONITORING_IP="${{ needs.infrastructure.outputs.ec2_ip }}"
+          fi
+          SSH_KEY="${{ needs.infrastructure.outputs.ec2_ssh_key }}"
+          if [ -z "${SSH_KEY}" ]; then
+            SSH_KEY="${{ secrets.EC2_SSH_KEY }}"
+          fi
+
+          if [ -n "${SSH_KEY}" ]; then
+            mkdir -p ~/.ssh
+            echo "${SSH_KEY}" > ~/.ssh/id_rsa
+            chmod 600 ~/.ssh/id_rsa
+            printf "Host *\n  StrictHostKeyChecking no\n  UserKnownHostsFile /dev/null\n  ServerAliveInterval 15\n  ServerAliveCountMax 20\n  ConnectTimeout 30\n" > ~/.ssh/config
+            chmod 600 ~/.ssh/config
+            ssh-keyscan -H ${MONITORING_IP} >> ~/.ssh/known_hosts || true
+
+            echo "==================== 2ND EC2 MONITORING & VECTOR NODE DOCKER STATUS ===================="
+            ssh -o StrictHostKeyChecking=no ubuntu@${MONITORING_IP} "sudo docker ps -a"
+
+            echo "==================== LOGS: NPCI-MCP SERVER ===================="
+            ssh -o StrictHostKeyChecking=no ubuntu@${MONITORING_IP} "sudo docker logs --tail 30 npci-mcp 2>&1" || true
+
+            echo "==================== LOGS: VECTOR DB ===================="
+            ssh -o StrictHostKeyChecking=no ubuntu@${MONITORING_IP} "sudo docker logs --tail 30 npci-vector-db 2>&1" || true
+
+            echo "==================== LOGS: PROMETHEUS ===================="
+            ssh -o StrictHostKeyChecking=no ubuntu@${MONITORING_IP} "sudo docker logs --tail 30 prometheus 2>&1" || true
+
+            echo "==================== LOGS: GRAFANA ===================="
+            ssh -o StrictHostKeyChecking=no ubuntu@${MONITORING_IP} "sudo docker logs --tail 30 grafana 2>&1" || true
+          else
+            echo "Notice: SSH Key not available for log streaming."
+          fi
+
+  # JOB 8: Build & Deploy Frontend Assets to S3 Bucket
   deploy-frontend:
-    name: 5. Deploy Frontend Assets (S3 Static Hosting)
+    name: 8. Deploy Frontend Assets (S3 Static Hosting)
     needs: infrastructure
     runs-on: ubuntu-latest
     steps:
@@ -160,141 +326,10 @@ jobs:
           echo "Deploying to S3 Bucket: ${S3_TARGET}"
           aws s3 sync dist/ s3://${S3_TARGET}/ --delete
 
-  # JOB 6: Deploy Services & Run Containers on EC2 (Services Up - Deploy)
-  deploy-docker-ec2:
-    name: 6. Deploy All Containers across 2x EC2 Architecture
-    needs: [infrastructure, vector-db-init, build-mcp-server, build-and-push-docker]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout Code Repository
-        uses: actions/checkout@v3
-
-      - name: Deploy Docker Containers to 2x EC2 Architecture
-        run: |
-          EC2_IP="${{ needs.infrastructure.outputs.ec2_ip }}"
-          MONITORING_IP="${{ needs.infrastructure.outputs.monitoring_ec2_ip }}"
-          SSH_KEY="${{ needs.infrastructure.outputs.ec2_ssh_key }}"
-          if [ -z "${SSH_KEY}" ]; then
-            SSH_KEY="${{ secrets.EC2_SSH_KEY }}"
-          fi
-          echo "App Node EC2 IP: ${EC2_IP}"
-          echo "Monitoring & Vector Node EC2 IP: ${MONITORING_IP}"
-          
-          if [ -n "${SSH_KEY}" ]; then
-            mkdir -p ~/.ssh
-            echo "${SSH_KEY}" > ~/.ssh/id_rsa
-            chmod 600 ~/.ssh/id_rsa
-            printf "Host *\n  StrictHostKeyChecking no\n  UserKnownHostsFile /dev/null\n  ServerAliveInterval 15\n  ServerAliveCountMax 20\n  ConnectTimeout 30\n" > ~/.ssh/config
-            chmod 600 ~/.ssh/config
-            ssh-keyscan -H ${EC2_IP} >> ~/.ssh/known_hosts || true
-            ssh-keyscan -H ${MONITORING_IP} >> ~/.ssh/known_hosts || true
-
-            echo "Deploying App Services to Primary EC2 (${EC2_IP})..."
-            ssh -o ServerAliveInterval=15 -o ServerAliveCountMax=20 ubuntu@${EC2_IP} "
-              sudo mkdir -p /data/db/postgres /data/db/uploads && sudo chmod -R 777 /data/db && \
-              sudo docker pull postgres:15-alpine || true && \
-              sudo docker rm -f npci-postgres || true && \
-              sudo docker run -d --name npci-postgres -p 5432:5432 -e POSTGRES_DB=npci_forum -e POSTGRES_USER=npci_user -e POSTGRES_PASSWORD=npci_password -v /data/db/postgres:/var/lib/postgresql/data --restart always postgres:15-alpine || true && \
-              sudo docker pull pravinnpci/npci-forum-python-backend:latest && \
-              sudo docker rm -f npci-backend || true && \
-              sudo docker run -d --name npci-backend -p 8000:8000 -v /data/db:/data/db --restart always pravinnpci/npci-forum-python-backend:latest && \
-              sudo docker pull pravinnpci/npci-forum-app:latest && \
-              sudo docker rm -f npci-app || true && \
-              sudo docker run -d --name npci-app -p 3000:3000 -v /data/db:/data/db --restart always pravinnpci/npci-forum-app:latest
-            "
-
-            if [ -n "${MONITORING_IP}" ]; then
-              echo "Deploying MCP, Vector DB & Monitoring to Secondary EC2 (${MONITORING_IP})..."
-              ssh -o ServerAliveInterval=15 -o ServerAliveCountMax=20 ubuntu@${MONITORING_IP} "
-                sudo mkdir -p /data/vector /etc/prometheus && sudo chmod -R 777 /data/vector && \
-                sudo docker pull qdrant/qdrant:latest || true && \
-                sudo docker rm -f npci-vector-db || true && \
-                sudo docker run -d --name npci-vector-db -p 6333:6333 -v /data/vector:/qdrant/storage --restart always qdrant/qdrant:latest || true && \
-                sudo docker pull pravinnpci/npci-forum-mcp:latest || true && \
-                sudo docker rm -f npci-mcp || true && \
-                sudo docker run -d --name npci-mcp -p 8001:8000 -v /data/vector:/data/vector --restart always pravinnpci/npci-forum-mcp:latest && \
-                sudo rm -rf /etc/prometheus/prometheus.yml && \
-                printf \"global:\n  scrape_interval: 15s\nscrape_configs:\n  - job_name: 'npci_forum_services'\n    static_configs:\n      - targets: ['${EC2_IP}:3000', '${EC2_IP}:8000', '${MONITORING_IP}:8001', '${EC2_IP}:5432']\n\" | sudo tee /etc/prometheus/prometheus.yml && \
-                sudo docker pull prom/prometheus:latest || true && \
-                sudo docker rm -f prometheus || true && \
-                sudo docker run -d --name prometheus -p 9090:9090 -v /etc/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml --restart always prom/prometheus:latest || true && \
-                sudo docker pull grafana/grafana:latest || true && \
-                sudo docker rm -f grafana || true && \
-                sudo docker run -d --name grafana -p 3001:3000 -e 'GF_SECURITY_ADMIN_PASSWORD=admin' -e 'GF_USERS_ALLOW_SIGN_UP=false' --restart always grafana/grafana:latest || true
-              "
-            fi
-            echo "Successfully deployed Docker containers to 2x EC2 instances"
-          else
-            echo "Notice: SSH Key not found. Containers will auto-deploy via EC2 user_data scripts."
-          fi
-
-  # JOB 7: Monitor Docker Logs & Service Health Check
-  monitor-docker-logs:
-    name: 7. Monitor Docker Logs & Service Health Check
-    needs: [infrastructure, deploy-docker-ec2]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check EC2 Docker Status and Stream Logs
-        run: |
-          EC2_IP="${{ needs.infrastructure.outputs.ec2_ip }}"
-          MONITORING_IP="${{ needs.infrastructure.outputs.monitoring_ec2_ip }}"
-          SSH_KEY="${{ needs.infrastructure.outputs.ec2_ssh_key }}"
-          if [ -z "${SSH_KEY}" ]; then
-            SSH_KEY="${{ secrets.EC2_SSH_KEY }}"
-          fi
-          
-          if [ -n "${SSH_KEY}" ]; then
-            mkdir -p ~/.ssh
-            echo "${SSH_KEY}" > ~/.ssh/id_rsa
-            chmod 600 ~/.ssh/id_rsa
-            printf "Host *\n  StrictHostKeyChecking no\n  UserKnownHostsFile /dev/null\n  ServerAliveInterval 15\n  ServerAliveCountMax 20\n  ConnectTimeout 30\n" > ~/.ssh/config
-            chmod 600 ~/.ssh/config
-            ssh-keyscan -H ${EC2_IP} >> ~/.ssh/known_hosts || true
-            
-            echo "==================== PRIMARY APP NODE DOCKER STATUS ===================="
-            ssh -o StrictHostKeyChecking=no ubuntu@${EC2_IP} "sudo docker ps -a"
-            
-            echo "==================== LOGS: NPCI-APP CONTAINER ===================="
-            ssh -o StrictHostKeyChecking=no ubuntu@${EC2_IP} "sudo docker logs --tail 30 npci-app 2>&1" || true
-            
-            echo "==================== LOGS: NPCI-BACKEND CONTAINER ===================="
-            ssh -o StrictHostKeyChecking=no ubuntu@${EC2_IP} "sudo docker logs --tail 30 npci-backend 2>&1" || true
-
-            echo "==================== LOGS: POSTGRES DB ===================="
-            ssh -o StrictHostKeyChecking=no ubuntu@${EC2_IP} "sudo docker logs --tail 30 npci-postgres 2>&1" || true
-
-            if [ -n "${MONITORING_IP}" ]; then
-              ssh-keyscan -H ${MONITORING_IP} >> ~/.ssh/known_hosts || true
-              echo "==================== MONITORING & VECTOR NODE DOCKER STATUS ===================="
-              ssh -o StrictHostKeyChecking=no ubuntu@${MONITORING_IP} "sudo docker ps -a"
-
-              echo "==================== LOGS: NPCI-MCP SERVER ===================="
-              ssh -o StrictHostKeyChecking=no ubuntu@${MONITORING_IP} "sudo docker logs --tail 30 npci-mcp 2>&1" || true
-
-              echo "==================== LOGS: VECTOR DB ===================="
-              ssh -o StrictHostKeyChecking=no ubuntu@${MONITORING_IP} "sudo docker logs --tail 30 npci-vector-db 2>&1" || true
-
-              echo "==================== LOGS: PROMETHEUS ===================="
-              ssh -o StrictHostKeyChecking=no ubuntu@${MONITORING_IP} "sudo docker logs --tail 30 prometheus 2>&1" || true
-
-              echo "==================== LOGS: GRAFANA ===================="
-              ssh -o StrictHostKeyChecking=no ubuntu@${MONITORING_IP} "sudo docker logs --tail 30 grafana 2>&1" || true
-            fi
-
-            echo "==================== HTTP HEALTH CHECK ===================="
-            echo "Testing Node.js Web App on http://${EC2_IP}:3000 ..."
-            curl -I --connect-timeout 5 "http://${EC2_IP}:3000" || echo "Web App starting up..."
-            
-            echo "Testing Python AI Backend on http://${EC2_IP}:8000 ..."
-            curl -I --connect-timeout 5 "http://${EC2_IP}:8000/docs" || echo "Backend starting up..."
-          else
-            echo "Notice: SSH Key not available for log streaming."
-          fi
-
-  # JOB 8: Helm Packaging & Kubernetes Specs Validation
+  # JOB 9: Helm Packaging & Kubernetes Specs Validation
   helm-k8s-packaging:
-    name: 8. Kubernetes Cluster & Helm Chart Validation
-    needs: [infrastructure, monitor-docker-logs]
+    name: 9. Kubernetes Cluster & Helm Chart Validation
+    needs: [infrastructure, deploy-core-app-ec2]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code Repository
@@ -304,31 +339,31 @@ jobs:
         run: |
           echo "Linting Helm Chart..."
           helm lint helm/app-chart
-          
+
           EC2_IP="${{ needs.infrastructure.outputs.ec2_ip }}"
           SSH_KEY="${{ needs.infrastructure.outputs.ec2_ssh_key }}"
           if [ -z "${SSH_KEY}" ]; then
             SSH_KEY="${{ secrets.EC2_SSH_KEY }}"
           fi
-          
+
           if [ -n "${SSH_KEY}" ]; then
             mkdir -p ~/.ssh
             echo "${SSH_KEY}" > ~/.ssh/id_rsa
             chmod 600 ~/.ssh/id_rsa
             ssh-keyscan -H ${EC2_IP} >> ~/.ssh/known_hosts || true
-            
+
             echo "==================== KUBERNETES NODE STATUS ===================="
             ssh -o StrictHostKeyChecking=no ubuntu@${EC2_IP} "sudo kubectl get nodes" || true
-            
+
             echo "==================== KUBERNETES PODS STATUS ===================="
             ssh -o StrictHostKeyChecking=no ubuntu@${EC2_IP} "sudo kubectl get pods -A" || true
           fi
           echo "Kubernetes & Helm charts verified successfully for EC2 IP: ${EC2_IP}"
 
-  # JOB 9: Grafana & Prometheus Monitoring Verification
+  # JOB 10: Grafana & Prometheus Monitoring Verification
   grafana-monitoring-check:
-    name: 9. Grafana & Prometheus Monitoring Health Check
-    needs: [infrastructure, helm-k8s-packaging]
+    name: 10. Grafana & Prometheus Monitoring Health Check
+    needs: [infrastructure, deploy-ai-vector-monitoring-ec2]
     runs-on: ubuntu-latest
     steps:
       - name: Check Grafana & Prometheus Services
@@ -340,12 +375,9 @@ jobs:
           echo "Target EC2 Monitoring IP: ${MONITORING_IP}"
           echo "Grafana Dashboard URL: http://${MONITORING_IP}:3001"
           echo "Prometheus Metrics URL: http://${MONITORING_IP}:9090"
-          
+
           echo "Testing Grafana UI availability..."
           curl -I --connect-timeout 5 "http://${MONITORING_IP}:3001" || echo "Grafana Server initializing..."
-          
+
           echo "Testing Prometheus Metrics collector..."
           curl -I --connect-timeout 5 "http://${MONITORING_IP}:9090" || echo "Prometheus collector initializing..."
-
-
-
