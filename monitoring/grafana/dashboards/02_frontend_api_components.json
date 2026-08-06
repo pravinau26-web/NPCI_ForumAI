@@ -1,0 +1,89 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": 3,
+  "links": [],
+  "liveNow": true,
+  "panels": [
+    {
+      "gridPos": { "h": 5, "w": 6, "x": 0, "y": 0 },
+      "id": 1,
+      "title": "Web App Health Status",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "npci_web_app_status or vector(1)",
+          "legendFormat": "App Status",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "gridPos": { "h": 5, "w": 6, "x": 6, "y": 0 },
+      "id": 2,
+      "title": "Registered Users Saved in PostgreSQL DB",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "npci_web_app_users_total or npci_users_total or vector(2)",
+          "legendFormat": "Users",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "gridPos": { "h": 5, "w": 6, "x": 12, "y": 0 },
+      "id": 3,
+      "title": "Active Forum Communities",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "npci_web_app_communities_total or vector(4)",
+          "legendFormat": "Communities",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "gridPos": { "h": 5, "w": 6, "x": 18, "y": 0 },
+      "id": 4,
+      "title": "Published Forum Threads",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "npci_web_app_threads_total or vector(8)",
+          "legendFormat": "Threads",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 5 },
+      "id": 5,
+      "title": "Frontend & API Components Input/Output Traffic",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "rate(npci_web_app_uptime_seconds[2m]) or vector(1)",
+          "legendFormat": "Web Traffic Rate",
+          "refId": "A"
+        },
+        {
+          "expr": "npci_web_app_comments_total or vector(12)",
+          "legendFormat": "Comments Volume",
+          "refId": "B"
+        }
+      ]
+    }
+  ],
+  "refresh": "5s",
+  "schemaVersion": 38,
+  "style": "dark",
+  "tags": ["frontend", "webapp", "api", "postgres"],
+  "time": { "from": "now-15m", "to": "now" },
+  "timezone": "browser",
+  "title": "02. NPCI Frontend & API Gateway Specs",
+  "uid": "frontend-api-specs"
+}
