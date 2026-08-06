@@ -14,8 +14,8 @@ output "ec2_instance_id" {
 }
 
 output "ec2_public_ip" {
-  value       = aws_instance.app_server.public_ip
-  description = "The public IP address of the primary EC2 instance"
+  value       = aws_eip.app_eip.public_ip
+  description = "The static Elastic IP address of the primary EC2 instance"
 }
 
 output "ec2_ssh_private_key" {
@@ -35,16 +35,16 @@ output "s3_bucket_website_endpoint" {
 }
 
 output "grafana_public_ip" {
-  value       = aws_instance.monitoring_vector_server.public_ip
+  value       = aws_eip.monitoring_eip.public_ip
   description = "Public IP address of the Grafana monitoring server"
 }
 
 output "monitoring_ec2_public_ip" {
-  value       = aws_instance.monitoring_vector_server.public_ip
+  value       = aws_eip.monitoring_eip.public_ip
   description = "Public IP address of the dedicated Monitoring & Vector DB EC2 instance"
 }
 
 output "grafana_url" {
-  value       = "http://${aws_instance.monitoring_vector_server.public_ip}:3001"
+  value       = "http://${aws_eip.monitoring_eip.public_ip}:3001"
   description = "Grafana dashboard URL"
 }

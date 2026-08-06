@@ -290,12 +290,15 @@ resource "aws_instance" "app_server" {
               systemctl enable docker
               usermod -aG docker ubuntu
 
-              # Format and Mount AWS EBS Volume for DB Persistence if attached
               mkdir -p /data/db
-              if ! blkid /dev/sdh && ! blkid /dev/xvdh && ! blkid /dev/nvme1n1; then
-                mkfs -t ext4 /dev/sdh || mkfs -t ext4 /dev/xvdh || mkfs -t ext4 /dev/nvme1n1 || true
+              DEV=$(lsblk -dno NAME,TYPE | grep disk | grep -v nvme0n1 | awk '{print $1}' | head -n 1)
+              if [ -n "$DEV" ]; then
+                TARGET_DEV="/dev/$DEV"
+                if ! blkid "$TARGET_DEV"; then
+                  mkfs -t ext4 "$TARGET_DEV" || true
+                fi
+                mount "$TARGET_DEV" /data/db || true
               fi
-              mount /dev/sdh /data/db || mount /dev/xvdh /data/db || mount /dev/nvme1n1 /data/db || true
               mkdir -p /data/db/postgres /data/db/uploads
               chmod -R 777 /data/db
               EOF
@@ -343,13 +346,24 @@ resource "aws_volume_attachment" "ebs_att" {
   instance_id = aws_instance.app_server.id
 }
 
-# 9. Lookup Existing Elastic IP (16.112.205.103) and Associate to EC2 Instance
-data "aws_eip" "existing_eip" {
-  public_ip = "16.112.205.103"
+# 10. Managed Elastic IPs with explicit Internet Gateway and Route Table dependency
+resource "aws_eip" "app_eip" {
+  domain     = "vpc"
+  instance   = aws_instance.app_server.id
+  depends_on = [aws_internet_gateway.gw, aws_route_table_association.public_assoc]
+
+  tags = {
+    Name = "npci-forum-app-eip"
+  }
 }
 
-resource "aws_eip_association" "eip_assoc" {
-  instance_id         = aws_instance.app_server.id
-  allocation_id       = data.aws_eip.existing_eip.id
-  allow_reassociation = true
+resource "aws_eip" "monitoring_eip" {
+  domain     = "vpc"
+  instance   = aws_instance.monitoring_vector_server.id
+  depends_on = [aws_internet_gateway.gw, aws_route_table_association.public_assoc]
+
+  tags = {
+    Name = "npci-forum-monitoring-eip"
+  }
 }
+
