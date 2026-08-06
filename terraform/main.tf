@@ -275,6 +275,12 @@ resource "aws_instance" "app_server" {
   vpc_security_group_ids = [aws_security_group.ec2_sg.id]
   key_name               = aws_key_pair.generated_key.key_name
 
+  root_block_device {
+    volume_size           = 20
+    volume_type           = "gp3"
+    delete_on_termination = true
+  }
+
   user_data = <<-EOF
               #!/bin/bash
               apt-get update -y
@@ -282,6 +288,9 @@ resource "aws_instance" "app_server" {
               systemctl start docker
               systemctl enable docker
               usermod -aG docker ubuntu
+
+              # Clean dangling images & stopped containers
+              docker system prune -af || true
 
               # Install lightweight K3s Kubernetes cluster for pod management
               curl -sfL https://get.k3s.io | sh -s - --write-kubeconfig-mode 644 || true
@@ -295,17 +304,15 @@ resource "aws_instance" "app_server" {
               mkdir -p /data/db/postgres /data/db/uploads
               chmod -R 777 /data/db
 
-              # 2. Run App Core Services
+              # 2. Run App Core Services cleanly
+              docker rm -f npci-postgres npci-backend npci-app || true
               docker pull postgres:15-alpine || true
-              docker rm -f npci-postgres || true
               docker run -d --name npci-postgres -p 5432:5432 -e POSTGRES_DB=npci_forum -e POSTGRES_USER=npci_user -e POSTGRES_PASSWORD=npci_password -v /data/db/postgres:/var/lib/postgresql/data --restart always postgres:15-alpine || true
 
               docker pull pravinnpci/npci-forum-python-backend:latest || true
-              docker rm -f npci-backend || true
               docker run -d --name npci-backend -p 8000:8000 -v /data/db:/data/db --restart always pravinnpci/npci-forum-python-backend:latest || true
 
               docker pull pravinnpci/npci-forum-app:latest || true
-              docker rm -f npci-app || true
               docker run -d --name npci-app -p 3000:3000 -v /data/db:/data/db --restart always pravinnpci/npci-forum-app:latest || true
               EOF
 
@@ -321,6 +328,12 @@ resource "aws_instance" "monitoring_vector_server" {
   subnet_id              = aws_subnet.public.id
   vpc_security_group_ids = [aws_security_group.ec2_sg.id]
   key_name               = aws_key_pair.generated_key.key_name
+
+  root_block_device {
+    volume_size           = 10
+    volume_type           = "gp3"
+    delete_on_termination = true
+  }
 
   user_data = <<-EOF
               #!/bin/bash
