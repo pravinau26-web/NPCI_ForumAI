@@ -301,10 +301,6 @@ resource "aws_instance" "app_server" {
               docker rm -f npci-backend || true
               docker run -d --name npci-backend -p 8000:8000 -v /data/db:/data/db --restart always pravinnpci/npci-forum-python-backend:latest || true
 
-              docker pull pravinnpci/npci-forum-mcp:latest || true
-              docker rm -f npci-mcp || true
-              docker run -d --name npci-mcp -p 8001:8000 -v /data/db:/data/db --restart always pravinnpci/npci-forum-mcp:latest || true
-
               docker pull pravinnpci/npci-forum-app:latest || true
               docker rm -f npci-app || true
               docker run -d --name npci-app -p 3000:3000 -v /data/db:/data/db --restart always pravinnpci/npci-forum-app:latest || true
@@ -334,10 +330,14 @@ resource "aws_instance" "monitoring_vector_server" {
               mkdir -p /data/vector /etc/prometheus
               chmod -R 777 /data/vector
 
-              # 1. Run Vector DB for Document Chunks RAG
+              # 1. Run Vector DB & MCP Server for Document Chunks RAG
               docker pull qdrant/qdrant:latest || true
               docker rm -f npci-vector-db || true
               docker run -d --name npci-vector-db -p 6333:6333 -v /data/vector:/qdrant/storage --restart always qdrant/qdrant:latest || true
+
+              docker pull pravinnpci/npci-forum-mcp:latest || true
+              docker rm -f npci-mcp || true
+              docker run -d --name npci-mcp -p 8001:8000 -v /data/vector:/data/vector --restart always pravinnpci/npci-forum-mcp:latest || true
 
               # 2. Setup Prometheus Monitoring
               cat <<'PROM' > /etc/prometheus/prometheus.yml

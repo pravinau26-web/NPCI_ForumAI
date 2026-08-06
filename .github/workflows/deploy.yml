@@ -198,23 +198,23 @@ jobs:
               sudo docker pull pravinnpci/npci-forum-python-backend:latest && \
               sudo docker rm -f npci-backend || true && \
               sudo docker run -d --name npci-backend -p 8000:8000 -v /data/db:/data/db --restart always pravinnpci/npci-forum-python-backend:latest && \
-              sudo docker pull pravinnpci/npci-forum-mcp:latest || true && \
-              sudo docker rm -f npci-mcp || true && \
-              sudo docker run -d --name npci-mcp -p 8001:8000 -v /data/db:/data/db --restart always pravinnpci/npci-forum-mcp:latest && \
               sudo docker pull pravinnpci/npci-forum-app:latest && \
               sudo docker rm -f npci-app || true && \
               sudo docker run -d --name npci-app -p 3000:3000 -v /data/db:/data/db --restart always pravinnpci/npci-forum-app:latest
             "
 
             if [ -n "${MONITORING_IP}" ]; then
-              echo "Deploying Monitoring & Vector DB to Secondary EC2 (${MONITORING_IP})..."
+              echo "Deploying MCP, Vector DB & Monitoring to Secondary EC2 (${MONITORING_IP})..."
               ssh -o ServerAliveInterval=15 -o ServerAliveCountMax=20 ubuntu@${MONITORING_IP} "
                 sudo mkdir -p /data/vector /etc/prometheus && sudo chmod -R 777 /data/vector && \
                 sudo docker pull qdrant/qdrant:latest || true && \
                 sudo docker rm -f npci-vector-db || true && \
                 sudo docker run -d --name npci-vector-db -p 6333:6333 -v /data/vector:/qdrant/storage --restart always qdrant/qdrant:latest || true && \
+                sudo docker pull pravinnpci/npci-forum-mcp:latest || true && \
+                sudo docker rm -f npci-mcp || true && \
+                sudo docker run -d --name npci-mcp -p 8001:8000 -v /data/vector:/data/vector --restart always pravinnpci/npci-forum-mcp:latest && \
                 sudo rm -rf /etc/prometheus/prometheus.yml && \
-                printf \"global:\n  scrape_interval: 15s\nscrape_configs:\n  - job_name: 'npci_forum_services'\n    static_configs:\n      - targets: ['${EC2_IP}:3000', '${EC2_IP}:8000', '${EC2_IP}:8001', '${EC2_IP}:5432']\n\" | sudo tee /etc/prometheus/prometheus.yml && \
+                printf \"global:\n  scrape_interval: 15s\nscrape_configs:\n  - job_name: 'npci_forum_services'\n    static_configs:\n      - targets: ['${EC2_IP}:3000', '${EC2_IP}:8000', '${MONITORING_IP}:8001', '${EC2_IP}:5432']\n\" | sudo tee /etc/prometheus/prometheus.yml && \
                 sudo docker pull prom/prometheus:latest || true && \
                 sudo docker rm -f prometheus || true && \
                 sudo docker run -d --name prometheus -p 9090:9090 -v /etc/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml --restart always prom/prometheus:latest || true && \
@@ -260,9 +260,6 @@ jobs:
             echo "==================== LOGS: NPCI-BACKEND CONTAINER ===================="
             ssh -o StrictHostKeyChecking=no ubuntu@${EC2_IP} "sudo docker logs --tail 30 npci-backend 2>&1" || true
 
-            echo "==================== LOGS: NPCI-MCP SERVER ===================="
-            ssh -o StrictHostKeyChecking=no ubuntu@${EC2_IP} "sudo docker logs --tail 30 npci-mcp 2>&1" || true
-
             echo "==================== LOGS: POSTGRES DB ===================="
             ssh -o StrictHostKeyChecking=no ubuntu@${EC2_IP} "sudo docker logs --tail 30 npci-postgres 2>&1" || true
 
@@ -270,6 +267,9 @@ jobs:
               ssh-keyscan -H ${MONITORING_IP} >> ~/.ssh/known_hosts || true
               echo "==================== MONITORING & VECTOR NODE DOCKER STATUS ===================="
               ssh -o StrictHostKeyChecking=no ubuntu@${MONITORING_IP} "sudo docker ps -a"
+
+              echo "==================== LOGS: NPCI-MCP SERVER ===================="
+              ssh -o StrictHostKeyChecking=no ubuntu@${MONITORING_IP} "sudo docker logs --tail 30 npci-mcp 2>&1" || true
 
               echo "==================== LOGS: VECTOR DB ===================="
               ssh -o StrictHostKeyChecking=no ubuntu@${MONITORING_IP} "sudo docker logs --tail 30 npci-vector-db 2>&1" || true

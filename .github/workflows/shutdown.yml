@@ -1,0 +1,102 @@
+name: Shutdown NPCI Forum Infrastructure & Services
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_destroy:
+        description: 'Type DESTROY to confirm full infrastructure teardown'
+        required: true
+        default: 'NO'
+
+env:
+  AWS_REGION: 'ap-south-2'
+  ACTIONS_RUNNER_DEBUG: 'true'
+  ACTIONS_STEP_DEBUG: 'true'
+
+jobs:
+  # STEP 1: Graceful Shutdown of Docker Services across 2x EC2 Architecture
+  shutdown-containers:
+    name: 1. Stop & Remove Docker Containers (2x EC2 Nodes)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code Repository
+        uses: actions/checkout@v3
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION || 'ap-south-2' }}
+
+      - name: Setup Terraform to retrieve EC2 IPs
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: 1.5.0
+          terraform_wrapper: false
+
+      - name: Stop Docker Containers via SSH
+        run: |
+          cd terraform
+          terraform init -reconfigure -backend-config="region=${{ secrets.AWS_REGION || 'ap-south-2' }}" || true
+          EC2_IP=$(terraform output -raw ec2_public_ip 2>/dev/null | tr -d '\r\n') || true
+          MONITORING_IP=$(terraform output -raw monitoring_ec2_public_ip 2>/dev/null | tr -d '\r\n') || true
+          EC2_KEY=$(terraform output -raw ec2_ssh_private_key 2>/dev/null) || true
+
+          if [ -z "${EC2_KEY}" ]; then
+            EC2_KEY="${{ secrets.EC2_SSH_KEY }}"
+          fi
+
+          if [ -n "${EC2_KEY}" ] && [ -n "${EC2_IP}" ]; then
+            mkdir -p ~/.ssh
+            echo "${EC2_KEY}" > ~/.ssh/id_rsa
+            chmod 600 ~/.ssh/id_rsa
+            printf "Host *\n  StrictHostKeyChecking no\n  UserKnownHostsFile /dev/null\n  ServerAliveInterval 15\n  ServerAliveCountMax 20\n  ConnectTimeout 30\n" > ~/.ssh/config
+            chmod 600 ~/.ssh/config
+
+            echo "Stopping Docker Containers on Primary App EC2 (${EC2_IP})..."
+            ssh ubuntu@${EC2_IP} "sudo docker stop npci-app npci-backend npci-postgres || true; sudo docker rm -f npci-app npci-backend npci-postgres || true" || true
+
+            if [ -n "${MONITORING_IP}" ]; then
+              echo "Stopping Docker Containers on Monitoring & Vector EC2 (${MONITORING_IP})..."
+              ssh ubuntu@${MONITORING_IP} "sudo docker stop npci-mcp npci-vector-db prometheus grafana || true; sudo docker rm -f npci-mcp npci-vector-db prometheus grafana || true" || true
+            fi
+            echo "All Docker services stopped successfully."
+          else
+            echo "Notice: EC2 IP or SSH Key not available; skipping container shutdown."
+          fi
+
+  # STEP 2: Terraform Destroy AWS Infrastructure Teardown (Optional if confirmed)
+  destroy-infrastructure:
+    name: 2. Terraform Teardown AWS Infrastructure
+    needs: shutdown-containers
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code Repository
+        uses: actions/checkout@v3
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: 1.5.0
+          terraform_wrapper: false
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION || 'ap-south-2' }}
+
+      - name: Destroy Infrastructure (If Confirmed)
+        run: |
+          if [ "${{ inputs.confirm_destroy }}" = "DESTROY" ]; then
+            echo "Initiating full Terraform AWS infrastructure teardown..."
+            cd terraform
+            terraform init -reconfigure -backend-config="region=${{ secrets.AWS_REGION || 'ap-south-2' }}"
+            terraform destroy -auto-approve
+            echo "AWS Infrastructure destroyed cleanly."
+          else
+            echo "Notice: confirm_destroy was set to '${{ inputs.confirm_destroy }}'. Skipping Terraform destroy."
+            echo "Docker containers were stopped. Infrastructure remains available for re-deploy."
+          fi
