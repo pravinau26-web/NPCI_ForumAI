@@ -337,18 +337,9 @@ resource "aws_instance" "monitoring_vector_server" {
   }
 }
 
+# 9. EBS Volume Attachment
 resource "aws_volume_attachment" "ebs_att" {
   device_name = "/dev/sdh"
   volume_id   = aws_ebs_volume.data_volume_v2.id
   instance_id = aws_instance.app_server.id
-}
-
-# 9. Allocate Elastic IP for Primary Application Node
-resource "aws_eip" "app_eip" {
-  domain   = "vpc"
-  instance = aws_instance.app_server.id
-
-  tags = {
-    Name = "npci-forum-app-eip"
-  }
 }
