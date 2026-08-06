@@ -18,8 +18,8 @@ variable "public_subnet_cidr" {
 
 variable "instance_type" {
   type        = string
-  default     = "t3.medium"
-  description = "EC2 instance size for Kubernetes/Helm deployment and microservices (4GB RAM, 2 vCPU)"
+  default     = "t3.micro"
+  description = "EC2 instance size for Kubernetes/Helm deployment (Free Tier Eligible)"
 }
 
 variable "ec2_ami_id" {
