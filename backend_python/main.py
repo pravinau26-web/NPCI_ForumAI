@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Request, BackgroundTasks
+from fastapi import FastAPI, HTTPException, Request, BackgroundTasks, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
@@ -71,6 +71,25 @@ def read_root():
 @app.get("/api/health")
 def health_check():
     return {"status": "healthy", "timestamp": datetime.utcnow().isoformat()}
+
+@app.get("/metrics")
+def get_metrics():
+    total_cost = sum(item.get("cost_usd", 0) for item in cost_records)
+    total_traces = len(observability_traces)
+    total_requests = len(observability_traces) + len(cost_records) + 1
+    content = f"""# HELP npci_backend_requests_total Total API requests processed
+# TYPE npci_backend_requests_total counter
+npci_backend_requests_total {total_requests}
+
+# HELP npci_backend_cost_usd_total Total AI agent estimated cost in USD
+# TYPE npci_backend_cost_usd_total counter
+npci_backend_cost_usd_total {total_cost:.6f}
+
+# HELP npci_backend_traces_total Total AI observability traces
+# TYPE npci_backend_traces_total gauge
+npci_backend_traces_total {total_traces}
+"""
+    return Response(content=content, media_type="text/plain")
 
 # 1. AI Coordinating Agent Endpoint
 @app.post("/api/ai/coordinate")

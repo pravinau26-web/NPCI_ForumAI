@@ -774,7 +774,7 @@ async function npciAssistantRAG(question: string, history: { sender: string; con
     // Simulate RAG answer using retrieved docs if we are just returning offline
     if (relevantRecords.length > 0) {
       return {
-         answer: `[Simulated RAG Answer]\nBased on retrieved chunks: ${relevantRecords[0].metadata.text.substring(0, 50)}...`,
+         answer: `${relevantRecords[0].metadata.text}`,
          confidence: "high",
          citations: [{ docTitle: relevantRecords[0].metadata.docTitle, section: relevantRecords[0].metadata.section, version: relevantRecords[0].metadata.version }]
       }

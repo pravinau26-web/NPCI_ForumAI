@@ -232,7 +232,7 @@ resource "aws_s3_bucket_website_configuration" "frontend_website" {
 # 7. EBS Volume Creation for K8s PVC / Persistent Storage
 resource "aws_ebs_volume" "data_volume" {
   availability_zone = data.aws_availability_zones.available.names[0]
-  size              = 20
+  size              = 10
   type              = "gp3"
 
   tags = {
@@ -282,6 +282,9 @@ resource "aws_instance" "app_server" {
               systemctl start docker
               systemctl enable docker
               usermod -aG docker ubuntu
+
+              # Install lightweight K3s Kubernetes cluster for pod management
+              curl -sfL https://get.k3s.io | sh -s - --write-kubeconfig-mode 644 || true
 
               # 1. Format and Mount AWS EBS Volume for DB Persistence
               mkdir -p /data/db

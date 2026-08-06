@@ -1,0 +1,18 @@
+global:
+  scrape_interval: 10s
+
+scrape_configs:
+  - job_name: 'npci_python_backend'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['app-server:8000', 'localhost:8000']
+
+  - job_name: 'npci_mcp_server'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['mcp-server:8001', 'localhost:8001']
+
+  - job_name: 'npci_vector_db'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['vector-db:6333', 'localhost:6333']

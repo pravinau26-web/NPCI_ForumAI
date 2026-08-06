@@ -31,7 +31,11 @@ export default function Login({ onLoginSuccess, theme, onToggleTheme }: LoginPro
         const res = await fetch("/api/users");
         if (res.ok) {
           const data = await res.json();
-          setAvailableUsers(data.filter((u: any) => u.id !== "npci_assistant"));
+          const filtered = data.filter((u: any) => u.id !== "npci_assistant");
+          setAvailableUsers(filtered);
+          if (filtered.length > 0) {
+            setReportsToInput(filtered[0].id);
+          }
         }
       } catch (err) {
         console.error("Failed to fetch supervisor users:", err);
@@ -201,12 +205,7 @@ export default function Login({ onLoginSuccess, theme, onToggleTheme }: LoginPro
     }
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(emailInput.trim())) {
-      setErrorMsg("Please enter a valid workspace email address.");
-      return false;
-    }
-
-    if (!emailInput.trim().toLowerCase().endsWith("@npci.org.in")) {
-      setErrorMsg("Unauthorized domain. Only @npci.org.in email addresses are authorized to create or login to this secure Payments Workspace.");
+      setErrorMsg("Please enter a valid email address.");
       return false;
     }
 

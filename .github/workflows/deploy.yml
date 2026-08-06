@@ -228,7 +228,9 @@ jobs:
 
             echo "Deploying MCP, Vector DB, Prometheus & Grafana to 2nd EC2 Node (${MONITORING_IP})..."
             ssh -o ServerAliveInterval=15 -o ServerAliveCountMax=20 ubuntu@${MONITORING_IP} "
-              sudo mkdir -p /data/vector /etc/prometheus /etc/grafana/provisioning/datasources && sudo chmod -R 777 /data/vector && \
+              which docker || (sudo apt-get update -y && sudo apt-get install -y docker.io && sudo systemctl start docker && sudo systemctl enable docker && sudo usermod -aG docker ubuntu)
+              until sudo docker info >/dev/null 2>&1; do sleep 2; done
+              sudo mkdir -p /data/vector /etc/prometheus /etc/grafana/provisioning/datasources /etc/grafana/provisioning/dashboards && sudo chmod -R 777 /data/vector && \
               sudo docker pull qdrant/qdrant:latest || true && \
               sudo docker rm -f npci-vector-db || true && \
               sudo docker run -d --name npci-vector-db -p 6333:6333 -v /data/vector:/qdrant/storage --restart always qdrant/qdrant:latest || true && \
@@ -236,11 +238,12 @@ jobs:
               sudo docker rm -f npci-mcp || true && \
               sudo docker run -d --name npci-mcp -p 8001:8000 -v /data/vector:/data/vector --restart always pravinnpci/npci-forum-mcp:latest || true && \
               sudo rm -rf /etc/prometheus/prometheus.yml && \
-              printf \"global:\n  scrape_interval: 15s\nscrape_configs:\n  - job_name: 'npci_forum_services'\n    static_configs:\n      - targets: ['${EC2_IP}:3000', '${EC2_IP}:8000', '${MONITORING_IP}:8001', '${EC2_IP}:5432']\n\" | sudo tee /etc/prometheus/prometheus.yml && \
+              printf \"global:\n  scrape_interval: 10s\nscrape_configs:\n  - job_name: 'npci_python_backend'\n    metrics_path: '/metrics'\n    static_configs:\n      - targets: ['${EC2_IP}:8000']\n  - job_name: 'npci_mcp_server'\n    metrics_path: '/metrics'\n    static_configs:\n      - targets: ['${MONITORING_IP}:8001']\n  - job_name: 'npci_web_app'\n    metrics_path: '/api/health'\n    static_configs:\n      - targets: ['${EC2_IP}:3000']\n\" | sudo tee /etc/prometheus/prometheus.yml && \
               sudo docker pull prom/prometheus:latest || true && \
               sudo docker rm -f prometheus || true && \
               sudo docker run -d --name prometheus -p 9090:9090 -v /etc/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml --restart always prom/prometheus:latest || true && \
               printf \"apiVersion: 1\ndatasources:\n  - name: Prometheus\n    type: prometheus\n    access: proxy\n    url: http://prometheus:9090\n    isDefault: true\n\" | sudo tee /etc/grafana/provisioning/datasources/prometheus.yaml && \
+              printf \"apiVersion: 1\nproviders:\n  - name: 'NPCI Platform Operational Dashboard'\n    orgId: 1\n    folder: ''\n    type: file\n    disableDeletion: false\n    editable: true\n    options:\n      path: /etc/grafana/provisioning/dashboards\n\" | sudo tee /etc/grafana/provisioning/dashboards/dashboards.yaml && \
               sudo docker pull grafana/grafana:latest || true && \
               sudo docker rm -f grafana || true && \
               sudo docker run -d --name grafana -p 3001:3000 -e 'GF_SECURITY_ADMIN_PASSWORD=admin' -e 'GF_USERS_ALLOW_SIGN_UP=false' -v /etc/grafana/provisioning:/etc/grafana/provisioning --restart always grafana/grafana:latest || true
@@ -276,7 +279,7 @@ jobs:
             ssh-keyscan -H ${MONITORING_IP} >> ~/.ssh/known_hosts || true
 
             echo "==================== 2ND EC2 MONITORING & VECTOR NODE DOCKER STATUS ===================="
-            ssh -o StrictHostKeyChecking=no ubuntu@${MONITORING_IP} "sudo docker ps -a"
+            ssh -o StrictHostKeyChecking=no ubuntu@${MONITORING_IP} "which docker || (sudo apt-get update -y && sudo apt-get install -y docker.io && sudo systemctl start docker && sudo systemctl enable docker && sudo usermod -aG docker ubuntu); until sudo docker info >/dev/null 2>&1; do sleep 2; done; sudo docker ps -a"
 
             echo "==================== LOGS: NPCI-MCP SERVER ===================="
             ssh -o StrictHostKeyChecking=no ubuntu@${MONITORING_IP} "sudo docker logs --tail 30 npci-mcp 2>&1" || true
