@@ -52,7 +52,7 @@ jobs:
             mkdir -p ~/.ssh
             echo "${EC2_KEY}" > ~/.ssh/id_rsa
             chmod 600 ~/.ssh/id_rsa
-            printf "Host *\n  StrictHostKeyChecking no\n  UserKnownHostsFile /dev/null\n  ServerAliveInterval 5\n  ServerAliveCountMax 2\n  ConnectTimeout 5\n" > ~/.ssh/config
+            printf "Host *\n  StrictHostKeyChecking no\n  UserKnownHostsFile /dev/null\n  ServerAliveInterval 5\n  ServerAliveCountMax 2\n  ConnectTimeout 10\n  ConnectionAttempts 1\n  BatchMode yes\n" > ~/.ssh/config
             chmod 600 ~/.ssh/config
 
             echo "Stopping Docker Containers on Primary App EC2 (${EC2_IP})..."

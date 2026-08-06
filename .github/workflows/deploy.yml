@@ -116,27 +116,30 @@ jobs:
             mkdir -p ~/.ssh
             echo "${SSH_KEY}" > ~/.ssh/id_rsa
             chmod 600 ~/.ssh/id_rsa
-            printf "Host *\n  StrictHostKeyChecking no\n  UserKnownHostsFile /dev/null\n  ServerAliveInterval 10\n  ServerAliveCountMax 30\n  ConnectTimeout 15\n  ConnectionAttempts 3\n" > ~/.ssh/config
+            printf "Host *\n  StrictHostKeyChecking no\n  UserKnownHostsFile /dev/null\n  ServerAliveInterval 15\n  ServerAliveCountMax 10\n  ConnectTimeout 20\n  ConnectionAttempts 1\n  BatchMode yes\n" > ~/.ssh/config
             chmod 600 ~/.ssh/config
-            ssh-keyscan -T 10 -H ${EC2_IP} >> ~/.ssh/known_hosts 2>/dev/null || true
+            ssh-keyscan -T 15 -H ${EC2_IP} >> ~/.ssh/known_hosts 2>/dev/null || true
 
             echo "Deploying Core App Services to 1st EC2 Node (${EC2_IP})..."
             SSH_READY=0
-            for attempt in {1..20}; do
-              if ssh -o ConnectTimeout=10 -o ConnectionAttempts=3 ubuntu@${EC2_IP} "echo 'SSH Connection Established to 1st EC2'"; then
+            for attempt in {1..25}; do
+              if ssh -o ConnectTimeout=15 ubuntu@${EC2_IP} "echo 'SSH Connection Established to 1st EC2'"; then
                 SSH_READY=1
                 break
               fi
-              echo "Waiting for SSH connection on 1st EC2 (Attempt $attempt/20)..."
-              sleep 8
+              echo "Waiting for SSH connection on 1st EC2 (Attempt $attempt/25)..."
+              sleep 10
             done
 
             if [ "$SSH_READY" -ne 1 ]; then
-              echo "Error: Failed to connect via SSH to 1st EC2 (${EC2_IP}) after 20 attempts."
+              echo "Error: Failed to connect via SSH to 1st EC2 (${EC2_IP}) after 25 attempts."
               exit 1
             fi
 
-            ssh -o ServerAliveInterval=10 -o ServerAliveCountMax=30 ubuntu@${EC2_IP} "
+            ssh -o ServerAliveInterval=15 -o ServerAliveCountMax=10 ubuntu@${EC2_IP} "
+              echo === Waiting for Cloud-Init Completion ===
+              sudo cloud-init status --wait || true
+
               echo === [1/6] Setting Hostname, Ensuring Docker & Directories ===
               grep -q '127.0.0.1 \$(hostname)' /etc/hosts || echo '127.0.0.1 \$(hostname)' | sudo tee -a /etc/hosts || true
               which docker || (sudo apt-get update -y && sudo apt-get install -y docker.io && sudo systemctl start docker && sudo systemctl enable docker && sudo usermod -aG docker ubuntu)
@@ -259,30 +262,33 @@ jobs:
             mkdir -p ~/.ssh
             echo "${SSH_KEY}" > ~/.ssh/id_rsa
             chmod 600 ~/.ssh/id_rsa
-            printf "Host *\n  StrictHostKeyChecking no\n  UserKnownHostsFile /dev/null\n  ServerAliveInterval 10\n  ServerAliveCountMax 30\n  ConnectTimeout 15\n  ConnectionAttempts 3\n" > ~/.ssh/config
+            printf "Host *\n  StrictHostKeyChecking no\n  UserKnownHostsFile /dev/null\n  ServerAliveInterval 15\n  ServerAliveCountMax 10\n  ConnectTimeout 20\n  ConnectionAttempts 1\n  BatchMode yes\n" > ~/.ssh/config
             chmod 600 ~/.ssh/config
-            ssh-keyscan -T 10 -H ${MONITORING_IP} >> ~/.ssh/known_hosts 2>/dev/null || true
+            ssh-keyscan -T 15 -H ${MONITORING_IP} >> ~/.ssh/known_hosts 2>/dev/null || true
 
             echo "Deploying MCP, Vector DB, Prometheus & Grafana to 2nd EC2 Node (${MONITORING_IP})..."
             SSH_READY=0
-            for attempt in {1..20}; do
-              if ssh -o ConnectTimeout=10 -o ConnectionAttempts=3 ubuntu@${MONITORING_IP} "echo 'SSH Connection Established to 2nd EC2'"; then
+            for attempt in {1..25}; do
+              if ssh -o ConnectTimeout=15 ubuntu@${MONITORING_IP} "echo 'SSH Connection Established to 2nd EC2'"; then
                 SSH_READY=1
                 break
               fi
-              echo "Waiting for SSH connection on 2nd EC2 (Attempt $attempt/20)..."
-              sleep 8
+              echo "Waiting for SSH connection on 2nd EC2 (Attempt $attempt/25)..."
+              sleep 10
             done
 
             if [ "$SSH_READY" -ne 1 ]; then
-              echo "Error: Failed to connect via SSH to 2nd EC2 (${MONITORING_IP}) after 20 attempts."
+              echo "Error: Failed to connect via SSH to 2nd EC2 (${MONITORING_IP}) after 25 attempts."
               exit 1
             fi
 
             echo "Transferring Grafana Dashboards to 2nd EC2..."
-            scp -o ConnectTimeout=10 monitoring/grafana/dashboards/*.json ubuntu@${MONITORING_IP}:/tmp/ || true
+            scp -o ConnectTimeout=15 monitoring/grafana/dashboards/*.json ubuntu@${MONITORING_IP}:/tmp/ || true
 
-            ssh -o ServerAliveInterval=10 -o ServerAliveCountMax=30 ubuntu@${MONITORING_IP} "
+            ssh -o ServerAliveInterval=15 -o ServerAliveCountMax=10 ubuntu@${MONITORING_IP} "
+              echo === Waiting for Cloud-Init Completion ===
+              sudo cloud-init status --wait || true
+
               echo === [1/8] Setting Hostname & Ensuring Docker ===
               grep -q '127.0.0.1 \$(hostname)' /etc/hosts || echo '127.0.0.1 \$(hostname)' | sudo tee -a /etc/hosts || true
               which docker || (sudo apt-get update -y && sudo apt-get install -y docker.io && sudo systemctl start docker && sudo systemctl enable docker && sudo usermod -aG docker ubuntu)

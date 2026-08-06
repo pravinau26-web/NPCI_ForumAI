@@ -283,19 +283,13 @@ resource "aws_instance" "app_server" {
 
   user_data = <<-EOF
               #!/bin/bash
-              apt-get update -y
-              apt-get install -y docker.io curl git xfsProgs
+              DEBIAN_FRONTEND=noninteractive apt-get update -y
+              DEBIAN_FRONTEND=noninteractive apt-get install -y docker.io curl git xfsProgs
               systemctl start docker
               systemctl enable docker
               usermod -aG docker ubuntu
 
-              # Clean dangling images safely
-              docker image prune -f || true
-
-              # Install lightweight K3s Kubernetes cluster for pod management
-              curl -sfL https://get.k3s.io | sh -s - --write-kubeconfig-mode 644 || true
-
-              # 1. Format and Mount AWS EBS Volume for DB Persistence
+              # Format and Mount AWS EBS Volume for DB Persistence if attached
               mkdir -p /data/db
               if ! blkid /dev/sdh && ! blkid /dev/xvdh && ! blkid /dev/nvme1n1; then
                 mkfs -t ext4 /dev/sdh || mkfs -t ext4 /dev/xvdh || mkfs -t ext4 /dev/nvme1n1 || true
@@ -303,20 +297,6 @@ resource "aws_instance" "app_server" {
               mount /dev/sdh /data/db || mount /dev/xvdh /data/db || mount /dev/nvme1n1 /data/db || true
               mkdir -p /data/db/postgres /data/db/uploads
               chmod -R 777 /data/db
-
-              # 2. Run App Core Services cleanly
-              docker rm -f npci-postgres npci-backend npci-app node-exporter || true
-              docker pull prom/node-exporter:latest || true
-              docker run -d --name node-exporter -p 9100:9100 -v /:/host:ro,rslave --restart always prom/node-exporter:latest --path.rootfs=/host || true
-
-              docker pull postgres:15-alpine || true
-              docker run -d --name npci-postgres -p 5432:5432 -e POSTGRES_DB=npci_forum -e POSTGRES_USER=npci_user -e POSTGRES_PASSWORD=npci_password -v /data/db/postgres:/var/lib/postgresql/data --restart always postgres:15-alpine || true
-
-              docker pull pravinnpci/npci-forum-python-backend:latest || true
-              docker run -d --name npci-backend -p 8000:8000 -e SERVICE_NAME='NPCI Forum Python Backend Engine' -v /data/db:/data/db --restart always pravinnpci/npci-forum-python-backend:latest || true
-
-              docker pull pravinnpci/npci-forum-app:latest || true
-              docker run -d --name npci-app -p 3000:3000 -e PYTHON_BACKEND_URL=http://localhost:8000 -v /data/db:/data/db --restart always pravinnpci/npci-forum-app:latest || true
               EOF
 
   tags = {
@@ -340,54 +320,14 @@ resource "aws_instance" "monitoring_vector_server" {
 
   user_data = <<-EOF
               #!/bin/bash
-              apt-get update -y
-              apt-get install -y docker.io curl git
+              DEBIAN_FRONTEND=noninteractive apt-get update -y
+              DEBIAN_FRONTEND=noninteractive apt-get install -y docker.io curl git
               systemctl start docker
               systemctl enable docker
               usermod -aG docker ubuntu
 
-              mkdir -p /data/vector /etc/prometheus
+              mkdir -p /data/vector /etc/prometheus /etc/grafana/provisioning/datasources /etc/grafana/provisioning/dashboards
               chmod -R 777 /data/vector
-
-              # 1. Run Vector DB & MCP Server for Document Chunks RAG
-              docker pull qdrant/qdrant:latest || true
-              docker rm -f npci-vector-db || true
-              docker run -d --name npci-vector-db -p 6333:6333 -v /data/vector:/qdrant/storage --restart always qdrant/qdrant:latest || true
-
-              docker pull pravinnpci/npci-forum-mcp:latest || true
-              docker rm -f npci-mcp || true
-              docker run -d --name npci-mcp -p 8001:8000 -v /data/vector:/data/vector --restart always pravinnpci/npci-forum-mcp:latest || true
-
-              # 2. Setup Prometheus Monitoring
-              cat <<'PROM' > /etc/prometheus/prometheus.yml
-global:
-  scrape_interval: 15s
-
-scrape_configs:
-  - job_name: 'npci_forum_services'
-    static_configs:
-      - targets: ['16.112.205.103:3000', '16.112.205.103:8000', '16.112.205.103:8001', '16.112.205.103:5432']
-PROM
-
-              docker pull prom/prometheus:latest || true
-              docker rm -f prometheus || true
-              docker run -d --name prometheus -p 9090:9090 -v /etc/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml --restart always prom/prometheus:latest || true
-
-              # 3. Setup Grafana Dashboard with Prometheus Datasource
-              mkdir -p /etc/grafana/provisioning/datasources
-              cat <<'GRAF' > /etc/grafana/provisioning/datasources/prometheus.yaml
-apiVersion: 1
-datasources:
-  - name: Prometheus
-    type: prometheus
-    access: proxy
-    url: http://prometheus:9090
-    isDefault: true
-GRAF
-
-              docker pull grafana/grafana:latest || true
-              docker rm -f grafana || true
-              docker run -d --name grafana -p 3001:3000 -e "GF_SECURITY_ADMIN_PASSWORD=admin" -e "GF_USERS_ALLOW_SIGN_UP=false" -v /etc/grafana/provisioning:/etc/grafana/provisioning --restart always grafana/grafana:latest || true
               EOF
 
   tags = {
