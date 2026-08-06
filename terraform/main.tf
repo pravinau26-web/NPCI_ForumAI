@@ -289,8 +289,8 @@ resource "aws_instance" "app_server" {
               systemctl enable docker
               usermod -aG docker ubuntu
 
-              # Clean dangling images & stopped containers
-              docker system prune -af || true
+              # Clean dangling images safely
+              docker image prune -f || true
 
               # Install lightweight K3s Kubernetes cluster for pod management
               curl -sfL https://get.k3s.io | sh -s - --write-kubeconfig-mode 644 || true
@@ -305,15 +305,18 @@ resource "aws_instance" "app_server" {
               chmod -R 777 /data/db
 
               # 2. Run App Core Services cleanly
-              docker rm -f npci-postgres npci-backend npci-app || true
+              docker rm -f npci-postgres npci-backend npci-app node-exporter || true
+              docker pull prom/node-exporter:latest || true
+              docker run -d --name node-exporter -p 9100:9100 -v /:/host:ro,rslave --restart always prom/node-exporter:latest --path.rootfs=/host || true
+
               docker pull postgres:15-alpine || true
               docker run -d --name npci-postgres -p 5432:5432 -e POSTGRES_DB=npci_forum -e POSTGRES_USER=npci_user -e POSTGRES_PASSWORD=npci_password -v /data/db/postgres:/var/lib/postgresql/data --restart always postgres:15-alpine || true
 
               docker pull pravinnpci/npci-forum-python-backend:latest || true
-              docker run -d --name npci-backend -p 8000:8000 -v /data/db:/data/db --restart always pravinnpci/npci-forum-python-backend:latest || true
+              docker run -d --name npci-backend -p 8000:8000 -e SERVICE_NAME='NPCI Forum Python Backend Engine' -v /data/db:/data/db --restart always pravinnpci/npci-forum-python-backend:latest || true
 
               docker pull pravinnpci/npci-forum-app:latest || true
-              docker run -d --name npci-app -p 3000:3000 -v /data/db:/data/db --restart always pravinnpci/npci-forum-app:latest || true
+              docker run -d --name npci-app -p 3000:3000 -e PYTHON_BACKEND_URL=http://localhost:8000 -v /data/db:/data/db --restart always pravinnpci/npci-forum-app:latest || true
               EOF
 
   tags = {
