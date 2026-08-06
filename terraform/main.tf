@@ -269,11 +269,12 @@ resource "aws_key_pair" "generated_key" {
 
 # 8. EC2 Instance 1: Primary Application Node (Web App, AI Backend, MCP Server, PostgreSQL)
 resource "aws_instance" "app_server" {
-  ami                    = data.aws_ami.ubuntu.id
-  instance_type          = var.instance_type
-  subnet_id              = aws_subnet.public.id
-  vpc_security_group_ids = [aws_security_group.ec2_sg.id]
-  key_name               = aws_key_pair.generated_key.key_name
+  ami                         = data.aws_ami.ubuntu.id
+  instance_type               = var.instance_type
+  subnet_id                   = aws_subnet.public.id
+  associate_public_ip_address = true
+  vpc_security_group_ids      = [aws_security_group.ec2_sg.id]
+  key_name                    = aws_key_pair.generated_key.key_name
 
   root_block_device {
     volume_size           = 20
@@ -306,11 +307,12 @@ resource "aws_instance" "app_server" {
 
 # 9. EC2 Instance 2: Dedicated Monitoring & Vector DB Node (Prometheus, Grafana, Vector DB RAG Store)
 resource "aws_instance" "monitoring_vector_server" {
-  ami                    = data.aws_ami.ubuntu.id
-  instance_type          = var.instance_type
-  subnet_id              = aws_subnet.public.id
-  vpc_security_group_ids = [aws_security_group.ec2_sg.id]
-  key_name               = aws_key_pair.generated_key.key_name
+  ami                         = data.aws_ami.ubuntu.id
+  instance_type               = var.instance_type
+  subnet_id                   = aws_subnet.public.id
+  associate_public_ip_address = true
+  vpc_security_group_ids      = [aws_security_group.ec2_sg.id]
+  key_name                    = aws_key_pair.generated_key.key_name
 
   root_block_device {
     volume_size           = 10

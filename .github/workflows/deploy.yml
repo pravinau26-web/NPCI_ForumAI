@@ -123,12 +123,13 @@ jobs:
             echo "Deploying Core App Services to 1st EC2 Node (${EC2_IP})..."
             SSH_READY=0
             for attempt in {1..30}; do
-              if ssh -o ConnectTimeout=8 ubuntu@${EC2_IP} "echo 'SSH Connection Established to 1st EC2'"; then
+              ssh-keyscan -H ${EC2_IP} >> ~/.ssh/known_hosts 2>/dev/null || true
+              if ssh -o ConnectTimeout=10 -o StrictHostKeyChecking=no ubuntu@${EC2_IP} "echo 'SSH Connection Established to 1st EC2'"; then
                 SSH_READY=1
                 break
               fi
               echo "Waiting for SSH connection on 1st EC2 (Attempt $attempt/30)..."
-              sleep 6
+              sleep 5
             done
 
             if [ "$SSH_READY" -ne 1 ]; then
@@ -269,12 +270,13 @@ jobs:
             echo "Deploying MCP, Vector DB, Prometheus & Grafana to 2nd EC2 Node (${MONITORING_IP})..."
             SSH_READY=0
             for attempt in {1..30}; do
-              if ssh -o ConnectTimeout=8 ubuntu@${MONITORING_IP} "echo 'SSH Connection Established to 2nd EC2'"; then
+              ssh-keyscan -H ${MONITORING_IP} >> ~/.ssh/known_hosts 2>/dev/null || true
+              if ssh -o ConnectTimeout=10 -o StrictHostKeyChecking=no ubuntu@${MONITORING_IP} "echo 'SSH Connection Established to 2nd EC2'"; then
                 SSH_READY=1
                 break
               fi
               echo "Waiting for SSH connection on 2nd EC2 (Attempt $attempt/30)..."
-              sleep 6
+              sleep 5
             done
 
             if [ "$SSH_READY" -ne 1 ]; then
