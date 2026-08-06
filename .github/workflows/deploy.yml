@@ -122,17 +122,17 @@ jobs:
 
             echo "Deploying Core App Services to 1st EC2 Node (${EC2_IP})..."
             SSH_READY=0
-            for attempt in {1..25}; do
-              if ssh -o ConnectTimeout=15 ubuntu@${EC2_IP} "echo 'SSH Connection Established to 1st EC2'"; then
+            for attempt in {1..15}; do
+              if ssh -o ConnectTimeout=5 ubuntu@${EC2_IP} "echo 'SSH Connection Established to 1st EC2'"; then
                 SSH_READY=1
                 break
               fi
-              echo "Waiting for SSH connection on 1st EC2 (Attempt $attempt/25)..."
-              sleep 10
+              echo "Waiting for SSH connection on 1st EC2 (Attempt $attempt/15)..."
+              sleep 3
             done
 
             if [ "$SSH_READY" -ne 1 ]; then
-              echo "Error: Failed to connect via SSH to 1st EC2 (${EC2_IP}) after 25 attempts."
+              echo "Error: Failed to connect via SSH to 1st EC2 (${EC2_IP}) after 15 attempts."
               exit 1
             fi
 
@@ -268,17 +268,17 @@ jobs:
 
             echo "Deploying MCP, Vector DB, Prometheus & Grafana to 2nd EC2 Node (${MONITORING_IP})..."
             SSH_READY=0
-            for attempt in {1..25}; do
-              if ssh -o ConnectTimeout=15 ubuntu@${MONITORING_IP} "echo 'SSH Connection Established to 2nd EC2'"; then
+            for attempt in {1..15}; do
+              if ssh -o ConnectTimeout=5 ubuntu@${MONITORING_IP} "echo 'SSH Connection Established to 2nd EC2'"; then
                 SSH_READY=1
                 break
               fi
-              echo "Waiting for SSH connection on 2nd EC2 (Attempt $attempt/25)..."
-              sleep 10
+              echo "Waiting for SSH connection on 2nd EC2 (Attempt $attempt/15)..."
+              sleep 3
             done
 
             if [ "$SSH_READY" -ne 1 ]; then
-              echo "Error: Failed to connect via SSH to 2nd EC2 (${MONITORING_IP}) after 25 attempts."
+              echo "Error: Failed to connect via SSH to 2nd EC2 (${MONITORING_IP}) after 15 attempts."
               exit 1
             fi
 
@@ -296,8 +296,8 @@ jobs:
 
               echo === [2/8] Creating Directories & Copying Dashboards ===
               sudo mkdir -p /data/vector /etc/prometheus /etc/grafana/provisioning/datasources /etc/grafana/provisioning/dashboards
-              sudo chmod -R 777 /data/vector
               sudo cp /tmp/*.json /etc/grafana/provisioning/dashboards/ 2>/dev/null || true
+              sudo chmod -R 777 /data/vector /etc/prometheus /etc/grafana
 
               echo === [3/8] Removing Old Monitoring Containers ===
               sudo docker rm -f npci-vector-db npci-mcp prometheus grafana node-exporter-2 2>/dev/null || true
@@ -315,14 +315,20 @@ jobs:
               echo === [6/8] Configuring Prometheus ===
               sudo rm -rf /etc/prometheus/prometheus.yml
               printf \"global:\n  scrape_interval: 10s\nscrape_configs:\n  - job_name: 'npci_python_backend'\n    metrics_path: '/metrics'\n    static_configs:\n      - targets: ['${EC2_IP}:8000']\n  - job_name: 'npci_mcp_server'\n    metrics_path: '/metrics'\n    static_configs:\n      - targets: ['${MONITORING_IP}:8001']\n  - job_name: 'npci_web_app'\n    metrics_path: '/metrics'\n    static_configs:\n      - targets: ['${EC2_IP}:3000']\n  - job_name: 'npci_vector_db'\n    metrics_path: '/metrics'\n    static_configs:\n      - targets: ['${MONITORING_IP}:6333']\n  - job_name: 'node_exporter'\n    static_configs:\n      - targets: ['${EC2_IP}:9100']\n  - job_name: 'node_exporter_2'\n    static_configs:\n      - targets: ['${MONITORING_IP}:9100']\n\" | sudo tee /etc/prometheus/prometheus.yml
+              sudo chmod -R 777 /etc/prometheus
               sudo docker pull prom/prometheus:latest || true
               sudo docker run -d --name prometheus -p 9090:9090 -v /etc/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml --restart always prom/prometheus:latest || true
 
               echo === [7/8] Configuring & Launching Grafana ===
               printf \"apiVersion: 1\ndatasources:\n  - name: Prometheus\n    type: prometheus\n    access: proxy\n    url: http://prometheus:9090\n    isDefault: true\n\" | sudo tee /etc/grafana/provisioning/datasources/prometheus.yaml
               printf \"apiVersion: 1\nproviders:\n  - name: 'NPCI Platform Operational Dashboards'\n    orgId: 1\n    folder: ''\n    type: file\n    disableDeletion: false\n    editable: true\n    options:\n      path: /etc/grafana/provisioning/dashboards\n\" | sudo tee /etc/grafana/provisioning/dashboards/dashboards.yaml
+              sudo chmod -R 777 /etc/grafana
               sudo docker pull grafana/grafana:latest || true
-              sudo docker run -d --name grafana -p 3001:3000 -e GF_SECURITY_ADMIN_PASSWORD=admin -e GF_USERS_ALLOW_SIGN_UP=false -v /etc/grafana/provisioning:/etc/grafana/provisioning --restart always grafana/grafana:latest || true
+              sudo docker run -d --name grafana -p 3001:3000 -e GF_SECURITY_ADMIN_PASSWORD=admin -e GF_USERS_ALLOW_SIGN_UP=false -e GF_SECURITY_ALLOW_EMBEDDING=true -e GF_AUTH_ANONYMOUS_ENABLED=true -e GF_AUTH_ANONYMOUS_ORG_ROLE=Admin -v /etc/grafana/provisioning:/etc/grafana/provisioning --restart always grafana/grafana:latest || true
+
+              echo === [8/8] Cleaning Dangling Images ===
+              sudo docker image prune -f || true
+            "
 
               echo === [8/8] Cleaning Dangling Images ===
               sudo docker image prune -f || true

@@ -1829,6 +1829,7 @@ app.post("/api/policies", async (req, res) => {
 
   threads.unshift(systemThread);
   broadcastEvent("all", "thread:created", { thread: systemThread, communityId: matchingCommId });
+  broadcastEvent("all", "policies:updated", policyDocuments);
 
   // Broadcast notification to all employees
   users.forEach(u => {

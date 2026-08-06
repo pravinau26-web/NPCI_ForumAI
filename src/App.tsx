@@ -149,6 +149,13 @@ export default function App() {
   };
 
   const wsRef = useRef<WebSocket | null>(null);
+  const activeChatIdRef = useRef(activeChatId);
+  const activeCommunityIdRef = useRef(activeCommunityId);
+  const activeThreadIdRef = useRef(activeThreadId);
+
+  useEffect(() => { activeChatIdRef.current = activeChatId; }, [activeChatId]);
+  useEffect(() => { activeCommunityIdRef.current = activeCommunityId; }, [activeCommunityId]);
+  useEffect(() => { activeThreadIdRef.current = activeThreadId; }, [activeThreadId]);
 
   // ==========================================
   // WEBSOCKET LIFECYCLE & EVENT HANDLERS
@@ -180,7 +187,7 @@ export default function App() {
 
           if (evType === "typing:status") {
             const { chatId, userId, isTyping } = payload;
-            if (activeChatId === chatId) {
+            if (activeChatIdRef.current === chatId) {
               setTypingStatus(prev => ({ ...prev, [userId]: isTyping }));
             }
           }
@@ -214,7 +221,7 @@ export default function App() {
 
           if (evType === "message:received") {
             const msg = payload as ChatMessage;
-            if (activeChatId === msg.chatId) {
+            if (activeChatIdRef.current === msg.chatId) {
               setChatMessages(prev => {
                 if (prev.some(m => m.id === msg.id)) return prev;
                 return [...prev, msg];
@@ -242,18 +249,16 @@ export default function App() {
           }
 
           if (evType === "thread:created") {
-            const { thread, communityId } = payload;
-            if (activeCommunityId === communityId) {
-              setThreads(prev => {
-                if (prev.some(t => t.id === thread.id)) return prev;
-                return [thread, ...prev];
-              });
-            }
+            const { thread } = payload;
+            setThreads(prev => {
+              if (prev.some(t => t.id === thread.id)) return prev;
+              return [thread, ...prev];
+            });
           }
 
           if (evType === "comment:created") {
             const { comment, threadId } = payload;
-            if (activeThreadId === threadId) {
+            if (activeThreadIdRef.current === threadId) {
               setComments(prev => {
                 if (prev.some(c => c.id === comment.id)) return prev;
                 return [...prev, comment];
@@ -270,7 +275,7 @@ export default function App() {
             const { threadId } = payload;
             setThreads(prev => prev.filter(t => t.id !== threadId));
             setComments(prev => prev.filter(c => c.threadId !== threadId));
-            if (activeThreadId === threadId) {
+            if (activeThreadIdRef.current === threadId) {
               setActiveThreadId(null);
             }
           }
@@ -284,10 +289,14 @@ export default function App() {
             setCommunities(prev => [...prev, payload]);
           }
 
+          if (evType === "policies:updated") {
+            setPolicies(payload);
+          }
+
           if (evType === "chat:deleted") {
             const { chatId } = payload;
             setChats(prev => prev.filter(c => c.id !== chatId));
-            if (activeChatId === chatId) setActiveView("forum");
+            if (activeChatIdRef.current === chatId) setActiveView("forum");
           }
           if (evType === "chat:created") {
             const newChat = payload as Chat;
@@ -322,7 +331,7 @@ export default function App() {
     return () => {
       wsRef.current?.close();
     };
-  }, [currentUser, activeChatId, activeCommunityId, activeThreadId]);
+  }, [currentUser]);
 
   // ==========================================
   // INITIAL DATA BOOTSTRAP FILLS
