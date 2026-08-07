@@ -1,4 +1,5 @@
 name: Deploy NPCI Forum to AWS (Terraform, Docker, Helm, S3)
+# Auto-deployment trigger: automated single-click deployment run
 
 on:
   push:
