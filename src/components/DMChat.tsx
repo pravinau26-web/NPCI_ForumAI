@@ -384,11 +384,11 @@ export default function DMChat({
                         <div
                           className={`p-4 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap font-sans ${
                             isMe
-                              ? "bg-slate-900 text-white rounded-tr-none"
+                              ? "bg-slate-900 dark:bg-indigo-600 text-white rounded-tr-none"
                               : isBot
-                              ? "bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-100 text-slate-800 rounded-tl-none shadow-sm"
+                              ? "bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-950/80 dark:to-indigo-950/80 border border-blue-100 dark:border-blue-800/50 text-slate-800 dark:text-slate-100 rounded-tl-none shadow-sm"
                               : isAutoResponse
-                              ? "bg-amber-50 border border-amber-200 text-slate-700 rounded-tl-none"
+                              ? "bg-amber-50 dark:bg-amber-950/80 border border-amber-200 dark:border-amber-800/50 text-slate-700 dark:text-amber-200 rounded-tl-none"
                               : "bg-white dark:bg-slate-900 dark:text-slate-100 border border-slate-200 dark:border-slate-800 text-slate-800 rounded-tl-none"
                           }`}
                         >
@@ -557,11 +557,11 @@ export default function DMChat({
                   value={msgInput}
                   onChange={handleInputChange}
                   onBlur={() => onSendTyping(false)}
-                  className="flex-1 bg-slate-50 text-slate-800 px-4 py-2.5 rounded-xl text-sm border border-slate-200 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all font-sans"
+                  className="flex-1 bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 px-4 py-2.5 rounded-xl text-sm border border-slate-200 dark:border-slate-800 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all font-sans"
                 />
                 <button
                   type="submit"
-                  className="bg-slate-900 hover:bg-slate-800 text-white p-3 rounded-xl transition shadow flex items-center justify-center cursor-pointer"
+                  className="bg-slate-900 hover:bg-slate-800 dark:bg-slate-100 dark:hover:bg-slate-200 text-white dark:text-slate-900 p-3 rounded-xl transition shadow flex items-center justify-center cursor-pointer"
                 >
                   <Send className="w-4 h-4" />
                 </button>

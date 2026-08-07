@@ -52,14 +52,14 @@ export default function AdminPanel({
   ];
 
   return (
-    <div className="flex-1 bg-slate-50 p-6 overflow-y-auto h-[calc(100vh-4rem)] text-left space-y-6">
+    <div className="flex-1 bg-slate-50 dark:bg-slate-950 p-6 overflow-y-auto h-[calc(100vh-4rem)] text-left space-y-6 transition-colors duration-200">
       {/* Title */}
-      <div className="border-b border-slate-200 pb-5">
-        <h1 className="font-bold text-slate-900 text-xl flex items-center gap-2">
-          <Shield className="w-5 h-5 text-blue-600" />
+      <div className="border-b border-slate-200 dark:border-slate-800 pb-5">
+        <h1 className="font-bold text-slate-900 dark:text-white text-xl flex items-center gap-2">
+          <Shield className="w-5 h-5 text-blue-600 dark:text-indigo-400" />
           <span>Platform Administration Portal</span>
         </h1>
-        <p className="text-xs text-slate-400 mt-1 font-medium">
+        <p className="text-xs text-slate-400 dark:text-slate-500 mt-1 font-medium">
           Manage employee permission configurations, assign administrative tokens, and monitor workspace gateways.
         </p>
       </div>
@@ -68,7 +68,7 @@ export default function AdminPanel({
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {metrics.map((m, idx) => (
           <div key={idx} className="bg-white dark:bg-slate-900 dark:text-slate-100 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 shadow-sm flex items-center gap-3.5">
-            <div className="bg-blue-50 p-2.5 rounded-xl text-blue-600 border border-blue-100/50">
+            <div className="bg-blue-50 dark:bg-blue-950/50 p-2.5 rounded-xl text-blue-600 dark:text-blue-400 border border-blue-100/50 dark:border-blue-900/50">
               <m.icon className="w-5 h-5" />
             </div>
             <div>
@@ -204,21 +204,21 @@ export default function AdminPanel({
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* LEFT TWO-THIRDS: Users List */}
         <div className="lg:col-span-2 bg-white dark:bg-slate-900 dark:text-slate-100 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-sm space-y-4">
-          <h3 className="font-bold text-slate-800 text-sm flex items-center gap-2 border-b border-slate-100 pb-3">
-            <Users className="w-4 h-4 text-slate-500" />
+          <h3 className="font-bold text-slate-800 dark:text-slate-100 text-sm flex items-center gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
+            <Users className="w-4 h-4 text-slate-500 dark:text-slate-400" />
             <span>Employee Access Controls</span>
           </h3>
 
-          <div className="divide-y divide-slate-100 overflow-x-auto">
+          <div className="divide-y divide-slate-100 dark:divide-slate-800 overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                <tr className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
                   <th className="pb-3 pr-4">Staff Member</th>
                   <th className="pb-3 px-4">Workspace Role</th>
                   <th className="pb-3 pl-4 text-right">Access Token Assignment</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                 {users.map((user) => {
                   const isAssistant = user.id === "npci_assistant";
                   if (isAssistant) return null; // NPCI Assistant role is locked
@@ -230,35 +230,35 @@ export default function AdminPanel({
                           <img
                             src={user.avatar}
                             alt={user.username}
-                            className="w-8 h-8 rounded-full object-cover border border-slate-200"
+                            className="w-8 h-8 rounded-full object-cover border border-slate-200 dark:border-slate-800"
                             referrerPolicy="no-referrer"
                           />
                           <span
-                            className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white ${getStatusColor(
+                            className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white dark:border-slate-900 ${getStatusColor(
                               user.status
                             )}`}
                           />
                         </div>
                         <div>
-                          <p className="font-bold text-slate-800 text-xs">{user.username}</p>
-                          <p className="text-[10px] text-slate-400 font-mono mt-0.5">{user.email}</p>
+                          <p className="font-bold text-slate-800 dark:text-slate-200 text-xs">{user.username}</p>
+                          <p className="text-[10px] text-slate-400 dark:text-slate-500 font-mono mt-0.5">{user.email}</p>
                         </div>
                       </td>
 
-                      <td className="py-4 px-4 text-xs font-semibold text-slate-500 font-mono">
+                      <td className="py-4 px-4 text-xs font-semibold text-slate-500 dark:text-slate-400 font-mono">
                         {getRoleLabel(user.role)}
                       </td>
 
                       <td className="py-4 pl-4 text-right">
                         {user.id === currentUser.id ? (
-                          <span className="text-[10px] text-slate-400 italic font-medium px-2 py-1 bg-slate-50 border rounded-lg">
+                          <span className="text-[10px] text-slate-400 dark:text-slate-500 italic font-medium px-2 py-1 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg">
                             Active Admin Session
                           </span>
                         ) : (
                           <select
                             value={user.role}
                             onChange={(e) => onUpdateRole(user.id, e.target.value as UserRole)}
-                            className="bg-slate-50 text-slate-700 text-xs font-bold border border-slate-200 rounded-lg p-1.5 focus:outline-none focus:border-blue-500 transition cursor-pointer"
+                            className="bg-slate-50 dark:bg-slate-950 text-slate-700 dark:text-slate-200 text-xs font-bold border border-slate-200 dark:border-slate-800 rounded-lg p-1.5 focus:outline-none focus:border-blue-500 transition cursor-pointer"
                           >
                             <option value="employee">Standard Employee</option>
                             <option value="lead">Team Lead / Owner</option>

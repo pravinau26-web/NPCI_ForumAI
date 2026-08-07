@@ -149,13 +149,13 @@ export default function PolicyManager({
   return (
     <div className="flex-1 bg-slate-50 dark:bg-slate-950 p-6 overflow-y-auto h-full text-left transition-colors duration-200">
       {/* Upper Title Section */}
-      <div className="flex justify-between items-center border-b border-slate-200 pb-5 mb-6">
+      <div className="flex justify-between items-center border-b border-slate-200 dark:border-slate-800 pb-5 mb-6">
         <div>
-          <h1 className="font-bold text-slate-900 text-xl flex items-center gap-2">
-            <Shield className="w-5 h-5 text-blue-600" />
+          <h1 className="font-bold text-slate-900 dark:text-slate-100 text-xl flex items-center gap-2">
+            <Shield className="w-5 h-5 text-blue-600 dark:text-indigo-400" />
             <span>NPCI Compliance & Policy Database</span>
           </h1>
-          <p className="text-xs text-slate-400 mt-1 font-medium">
+          <p className="text-xs text-slate-400 dark:text-slate-500 mt-1 font-medium">
             Centralized document ingestion center for UPI, RuPay, and AePS. Grounded on FIPS-compliant RAG memory.
           </p>
         </div>

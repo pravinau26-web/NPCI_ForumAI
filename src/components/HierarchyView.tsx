@@ -154,7 +154,7 @@ export default function HierarchyView({ users, currentUser }: HierarchyViewProps
                       className={`p-4 rounded-2xl border transition-all text-left cursor-pointer flex gap-3 items-start select-none relative ${
                         selectedNode?.id === member.id
                           ? "bg-blue-50/50 dark:bg-indigo-950/10 border-blue-400 dark:border-indigo-500 shadow-md"
-                          : "bg-white dark:bg-slate-900 hover:bg-slate-550 dark:hover:bg-slate-900/60 border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700"
+                          : "bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800/60 border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700"
                       }`}
                     >
                       <img
