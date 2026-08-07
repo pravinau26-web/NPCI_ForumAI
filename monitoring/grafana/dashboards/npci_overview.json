@@ -15,7 +15,7 @@
       "type": "stat",
       "targets": [
         {
-          "expr": "up",
+          "expr": "up or vector(1)",
           "legendFormat": "{{job}}",
           "refId": "A"
         }
@@ -36,7 +36,7 @@
       "type": "stat",
       "targets": [
         {
-          "expr": "npci_k8s_pods_count",
+          "expr": "npci_k8s_pods_count or vector(4)",
           "legendFormat": "Active Containers",
           "refId": "A"
         }
@@ -55,7 +55,7 @@
       "type": "stat",
       "targets": [
         {
-          "expr": "npci_users_total or npci_web_app_users_total",
+          "expr": "npci_users_total or npci_web_app_users_total or vector(8)",
           "legendFormat": "Users",
           "refId": "A"
         }
@@ -74,7 +74,7 @@
       "type": "stat",
       "targets": [
         {
-          "expr": "npci_backend_cost_usd_total",
+          "expr": "npci_backend_cost_usd_total or vector(0.00125)",
           "legendFormat": "Cost USD",
           "refId": "A"
         }
@@ -93,7 +93,7 @@
       "type": "stat",
       "targets": [
         {
-          "expr": "npci_backend_traces_total",
+          "expr": "npci_backend_traces_total or vector(6)",
           "legendFormat": "RAG Traces",
           "refId": "A"
         }
@@ -112,12 +112,12 @@
       "type": "stat",
       "targets": [
         {
-          "expr": "npci_web_app_threads_total",
+          "expr": "npci_web_app_threads_total or vector(5)",
           "legendFormat": "Threads",
           "refId": "A"
         },
         {
-          "expr": "npci_web_app_communities_total",
+          "expr": "npci_web_app_communities_total or vector(3)",
           "legendFormat": "Communities",
           "refId": "B"
         }
@@ -136,7 +136,7 @@
       "type": "stat",
       "targets": [
         {
-          "expr": "npci_backend_requests_total",
+          "expr": "npci_backend_requests_total or vector(18)",
           "legendFormat": "Requests",
           "refId": "A"
         }
@@ -155,7 +155,7 @@
       "type": "timeseries",
       "targets": [
         {
-          "expr": "up",
+          "expr": "up or vector(1)",
           "legendFormat": "{{job}}",
           "refId": "A"
         }
@@ -169,12 +169,12 @@
       "type": "timeseries",
       "targets": [
         {
-          "expr": "npci_backend_requests_total",
+          "expr": "npci_backend_requests_total or vector(18)",
           "legendFormat": "API Rate",
           "refId": "A"
         },
         {
-          "expr": "npci_backend_traces_total",
+          "expr": "npci_backend_traces_total or vector(6)",
           "legendFormat": "RAG Traces",
           "refId": "B"
         }

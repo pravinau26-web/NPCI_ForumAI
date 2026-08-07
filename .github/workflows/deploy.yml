@@ -167,10 +167,31 @@ jobs:
               sudo docker pull pravinnpci/npci-forum-app:latest || true
               sudo docker run -d --name npci-app -p 3000:3000 -p 80:3000 -e PYTHON_BACKEND_URL=http://172.17.0.1:8000 -v /data/db:/data/db --restart always pravinnpci/npci-forum-app:latest || true
 
-              echo === [6/6] Cleaning Dangling Images ===
+              echo === [6/6] Installing K3s Kubernetes Cluster Engine & Deploying Helm App Chart ===
+              which k3s || curl -sfL https://get.k3s.io | sh -s - --write-kubeconfig-mode 644 || true
+              sudo systemctl start k3s || true
+              sudo systemctl enable k3s || true
+              sudo chmod 644 /etc/rancher/k3s/k3s.yaml || true
+              sudo ln -sf /usr/local/bin/k3s /usr/local/bin/kubectl 2>/dev/null || true
+              sudo mkdir -p /root/.kube ~/.kube
+              sudo cp /etc/rancher/k3s/k3s.yaml /root/.kube/config 2>/dev/null || true
+              sudo cp /etc/rancher/k3s/k3s.yaml ~/.kube/config 2>/dev/null || true
+              which helm || (curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash) || true
+
+              echo === Cleaning Dangling Images ===
               sudo docker image prune -f || true
             "
-            echo "Successfully deployed Core App Services (Frontend, Backend, PostgreSQL DB) to 1st EC2 Node"
+
+            echo "Transferring Helm Charts to 1st EC2 Node..."
+            scp -r helm ubuntu@${EC2_IP}:/tmp/ || true
+
+            ssh -o ServerAliveInterval=15 -o ServerAliveCountMax=10 ubuntu@${EC2_IP} "
+              echo === Applying Kubernetes Specs & Helm Chart ===
+              sudo kubectl apply -f <(sudo helm template npci-app /tmp/helm/app-chart) --kubeconfig /etc/rancher/k3s/k3s.yaml || sudo helm upgrade --install npci-app /tmp/helm/app-chart --kubeconfig /etc/rancher/k3s/k3s.yaml || true
+              echo === Kubernetes Pods Status ===
+              sudo kubectl get pods -A --kubeconfig /etc/rancher/k3s/k3s.yaml || true
+            "
+            echo "Successfully deployed Core App Services & Kubernetes K3s Cluster to 1st EC2 Node"
           else
             echo "Notice: SSH Key not found. Containers will auto-deploy via EC2 user_data scripts."
           fi
@@ -299,37 +320,38 @@ jobs:
               which docker || (sudo apt-get update -y && sudo apt-get install -y docker.io && sudo systemctl start docker && sudo systemctl enable docker && sudo usermod -aG docker ubuntu)
               until sudo docker info >/dev/null 2>&1; do sleep 2; done
 
-              echo === [2/8] Creating Directories & Copying Dashboards ===
+              echo === [2/8] Creating Directories, Docker Network & Copying Dashboards ===
               sudo mkdir -p /data/vector /etc/prometheus /etc/grafana/provisioning/datasources /etc/grafana/provisioning/dashboards
               sudo cp /tmp/*.json /etc/grafana/provisioning/dashboards/ 2>/dev/null || true
               sudo chmod -R 777 /data/vector /etc/prometheus /etc/grafana
+              sudo docker network create npci-net 2>/dev/null || true
 
               echo === [3/8] Removing Old Monitoring Containers ===
               sudo docker rm -f npci-vector-db npci-mcp prometheus grafana node-exporter-2 2>/dev/null || true
 
               echo === [4/8] Launching Node Exporter 2 ===
               sudo docker pull prom/node-exporter:latest || true
-              sudo docker run -d --name node-exporter-2 -p 9100:9100 -v /:/host:ro,rslave --restart always prom/node-exporter:latest --path.rootfs=/host || true
+              sudo docker run -d --name node-exporter-2 --network npci-net -p 9100:9100 -v /:/host:ro,rslave --restart always prom/node-exporter:latest --path.rootfs=/host || true
 
               echo === [5/8] Launching Vector DB & MCP Vector Server ===
               sudo docker pull qdrant/qdrant:latest || true
-              sudo docker run -d --name npci-vector-db -p 6333:6333 -v /data/vector:/qdrant/storage --restart always qdrant/qdrant:latest || true
+              sudo docker run -d --name npci-vector-db --network npci-net -p 6333:6333 -v /data/vector:/qdrant/storage --restart always qdrant/qdrant:latest || true
               sudo docker pull pravinnpci/npci-forum-mcp:latest || true
-              sudo docker run -d --name npci-mcp -p 8001:8000 -e SERVICE_NAME=\"NPCI Forum MCP Vector Engine\" -v /data/vector:/data/vector --restart always pravinnpci/npci-forum-mcp:latest || true
+              sudo docker run -d --name npci-mcp --network npci-net -p 8001:8000 -e SERVICE_NAME=\"NPCI Forum MCP Vector Engine\" -v /data/vector:/data/vector --restart always pravinnpci/npci-forum-mcp:latest || true
 
               echo === [6/8] Configuring Prometheus ===
               sudo rm -rf /etc/prometheus/prometheus.yml
-              printf \"global:\n  scrape_interval: 10s\nscrape_configs:\n  - job_name: 'npci_python_backend'\n    metrics_path: '/metrics'\n    static_configs:\n      - targets: ['${EC2_IP}:8000']\n  - job_name: 'npci_mcp_server'\n    metrics_path: '/metrics'\n    static_configs:\n      - targets: ['${MONITORING_IP}:8001']\n  - job_name: 'npci_web_app'\n    metrics_path: '/metrics'\n    static_configs:\n      - targets: ['${EC2_IP}:3000']\n  - job_name: 'npci_vector_db'\n    metrics_path: '/metrics'\n    static_configs:\n      - targets: ['${MONITORING_IP}:6333']\n  - job_name: 'node_exporter'\n    static_configs:\n      - targets: ['${EC2_IP}:9100']\n  - job_name: 'node_exporter_2'\n    static_configs:\n      - targets: ['${MONITORING_IP}:9100']\n\" | sudo tee /etc/prometheus/prometheus.yml
+              printf \"global:\n  scrape_interval: 10s\nscrape_configs:\n  - job_name: 'npci_python_backend'\n    metrics_path: '/metrics'\n    static_configs:\n      - targets: ['${EC2_IP}:8000']\n  - job_name: 'npci_mcp_server'\n    metrics_path: '/metrics'\n    static_configs:\n      - targets: ['${MONITORING_IP}:8001', 'npci-mcp:8000']\n  - job_name: 'npci_web_app'\n    metrics_path: '/metrics'\n    static_configs:\n      - targets: ['${EC2_IP}:3000']\n  - job_name: 'npci_vector_db'\n    metrics_path: '/metrics'\n    static_configs:\n      - targets: ['${MONITORING_IP}:6333', 'npci-vector-db:6333']\n  - job_name: 'node_exporter'\n    static_configs:\n      - targets: ['${EC2_IP}:9100']\n  - job_name: 'node_exporter_2'\n    static_configs:\n      - targets: ['${MONITORING_IP}:9100', 'node-exporter-2:9100']\n\" | sudo tee /etc/prometheus/prometheus.yml
               sudo chmod -R 777 /etc/prometheus
               sudo docker pull prom/prometheus:latest || true
-              sudo docker run -d --name prometheus -p 9090:9090 -v /etc/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml --restart always prom/prometheus:latest || true
+              sudo docker run -d --name prometheus --network npci-net -p 9090:9090 -v /etc/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml --restart always prom/prometheus:latest || true
 
               echo === [7/8] Configuring & Launching Grafana ===
               printf \"apiVersion: 1\ndatasources:\n  - name: Prometheus\n    type: prometheus\n    access: proxy\n    url: http://prometheus:9090\n    isDefault: true\n\" | sudo tee /etc/grafana/provisioning/datasources/prometheus.yaml
               printf \"apiVersion: 1\nproviders:\n  - name: 'NPCI Platform Operational Dashboards'\n    orgId: 1\n    folder: ''\n    type: file\n    disableDeletion: false\n    editable: true\n    options:\n      path: /etc/grafana/provisioning/dashboards\n\" | sudo tee /etc/grafana/provisioning/dashboards/dashboards.yaml
               sudo chmod -R 777 /etc/grafana
               sudo docker pull grafana/grafana:latest || true
-              sudo docker run -d --name grafana -p 3001:3000 -p 80:3000 -e GF_SECURITY_ADMIN_PASSWORD=admin -e GF_USERS_ALLOW_SIGN_UP=false -e GF_SECURITY_ALLOW_EMBEDDING=true -e GF_AUTH_ANONYMOUS_ENABLED=true -e GF_AUTH_ANONYMOUS_ORG_ROLE=Admin -v /etc/grafana/provisioning:/etc/grafana/provisioning --restart always grafana/grafana:latest || true
+              sudo docker run -d --name grafana --network npci-net -p 3001:3000 -p 80:3000 -e GF_SECURITY_ADMIN_PASSWORD=admin -e GF_USERS_ALLOW_SIGN_UP=false -e GF_SECURITY_ALLOW_EMBEDDING=true -e GF_AUTH_ANONYMOUS_ENABLED=true -e GF_AUTH_ANONYMOUS_ORG_ROLE=Admin -v /etc/grafana/provisioning:/etc/grafana/provisioning --restart always grafana/grafana:latest || true
 
               echo === [8/8] Cleaning Dangling Images ===
               sudo docker image prune -f || true
@@ -442,10 +464,19 @@ jobs:
             ssh-keyscan -H ${EC2_IP} >> ~/.ssh/known_hosts || true
 
             echo "==================== KUBERNETES NODE STATUS ===================="
-            ssh -o StrictHostKeyChecking=no ubuntu@${EC2_IP} "sudo kubectl get nodes" || true
+            ssh -o StrictHostKeyChecking=no ubuntu@${EC2_IP} "sudo kubectl get nodes --kubeconfig /etc/rancher/k3s/k3s.yaml" || true
+
+            echo "==================== KUBERNETES DEPLOYMENTS STATUS ===================="
+            ssh -o StrictHostKeyChecking=no ubuntu@${EC2_IP} "sudo kubectl get deployments -A --kubeconfig /etc/rancher/k3s/k3s.yaml" || true
+
+            echo "==================== KUBERNETES REPLICA SETS STATUS ===================="
+            ssh -o StrictHostKeyChecking=no ubuntu@${EC2_IP} "sudo kubectl get replicasets -A --kubeconfig /etc/rancher/k3s/k3s.yaml" || true
 
             echo "==================== KUBERNETES PODS STATUS ===================="
-            ssh -o StrictHostKeyChecking=no ubuntu@${EC2_IP} "sudo kubectl get pods -A" || true
+            ssh -o StrictHostKeyChecking=no ubuntu@${EC2_IP} "sudo kubectl get pods -A --kubeconfig /etc/rancher/k3s/k3s.yaml" || true
+
+            echo "==================== KUBERNETES HPA AUTOSCALING STATUS ===================="
+            ssh -o StrictHostKeyChecking=no ubuntu@${EC2_IP} "sudo kubectl get hpa -A --kubeconfig /etc/rancher/k3s/k3s.yaml" || true
           fi
           echo "Kubernetes & Helm charts verified successfully for EC2 IP: ${EC2_IP}"
 
