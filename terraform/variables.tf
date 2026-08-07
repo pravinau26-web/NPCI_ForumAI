@@ -33,3 +33,15 @@ variable "s3_bucket_name" {
   default     = "npci-forum-frontend-app-bucket"
   description = "Name of the S3 bucket for frontend distribution"
 }
+
+variable "app_eip_allocation_id" {
+  type        = string
+  default     = "eipalloc-0a3ef0d9cb1f2127e" # Pre-allocated static Elastic IP (16.112.205.103)
+  description = "Existing Elastic IP allocation ID for primary EC2 App Node"
+}
+
+variable "monitoring_eip_allocation_id" {
+  type        = string
+  default     = "eipalloc-0261f42bf9137d678" # Pre-allocated static Elastic IP (16.112.229.62)
+  description = "Existing Elastic IP allocation ID for secondary Monitoring Node"
+}

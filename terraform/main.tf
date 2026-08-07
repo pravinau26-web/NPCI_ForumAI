@@ -347,3 +347,27 @@ resource "aws_volume_attachment" "ebs_att" {
   volume_id   = aws_ebs_volume.data_volume_v2.id
   instance_id = aws_instance.app_server.id
 }
+
+# 10. Static Elastic IP Associations for persistent IP addressing
+data "aws_eip" "app_eip" {
+  count = var.app_eip_allocation_id != "" ? 1 : 0
+  id    = var.app_eip_allocation_id
+}
+
+resource "aws_eip_association" "app_eip_assoc" {
+  count         = var.app_eip_allocation_id != "" ? 1 : 0
+  instance_id   = aws_instance.app_server.id
+  allocation_id = var.app_eip_allocation_id
+}
+
+data "aws_eip" "monitoring_eip" {
+  count = var.monitoring_eip_allocation_id != "" ? 1 : 0
+  id    = var.monitoring_eip_allocation_id
+}
+
+resource "aws_eip_association" "monitoring_eip_assoc" {
+  count         = var.monitoring_eip_allocation_id != "" ? 1 : 0
+  instance_id   = aws_instance.monitoring_vector_server.id
+  allocation_id = var.monitoring_eip_allocation_id
+}
+
