@@ -484,7 +484,7 @@ jobs:
           echo "| **Web App Frontend** | [http://${EC2_IP}:3000](http://${EC2_IP}:3000) | Port 3000 (EC2 App Node) | 🟢 Active |" >> $GITHUB_STEP_SUMMARY
           echo "| **Web App (HTTP Direct)** | [http://${EC2_IP}](http://${EC2_IP}) | Port 80 (EC2 App Node) | 🟢 Active |" >> $GITHUB_STEP_SUMMARY
           echo "| **AI Backend FastAPI & Swagger Docs** | [http://${EC2_IP}:8000/docs#/](http://${EC2_IP}:8000/docs#/) | Port 8000 (EC2 App Node) | 🟢 Active |" >> $GITHUB_STEP_SUMMARY
-          echo "| **MCP Server API** | [http://${EC2_IP}:8001](http://${EC2_IP}:8001) | Port 8001 (EC2 App Node) | 🟢 Active |" >> $GITHUB_STEP_SUMMARY
+          echo "| **MCP Server API** | [http://${MONITORING_IP}:8001](http://${MONITORING_IP}:8001) | Port 8001 (EC2 Monitoring Node) | 🟢 Active |" >> $GITHUB_STEP_SUMMARY
           echo "| **Grafana Monitoring Dashboard** | [http://${MONITORING_IP}:3001](http://${MONITORING_IP}:3001) | Port 3001 (EC2 Monitoring) | 🟢 Active |" >> $GITHUB_STEP_SUMMARY
           echo "| **Prometheus Metrics Collector** | [http://${MONITORING_IP}:9090](http://${MONITORING_IP}:9090) | Port 9090 (EC2 Monitoring) | 🟢 Active |" >> $GITHUB_STEP_SUMMARY
           echo "| **Qdrant Vector DB Engine** | [http://${MONITORING_IP}:6333](http://${MONITORING_IP}:6333) | Port 6333 (EC2 Monitoring) | 🟢 Active |" >> $GITHUB_STEP_SUMMARY
