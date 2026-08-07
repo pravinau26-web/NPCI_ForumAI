@@ -285,7 +285,9 @@ resource "aws_instance" "app_server" {
   user_data = <<-EOF
               #!/bin/bash
               DEBIAN_FRONTEND=noninteractive apt-get update -y
-              DEBIAN_FRONTEND=noninteractive apt-get install -y docker.io curl git xfsProgs
+              DEBIAN_FRONTEND=noninteractive apt-get install -y docker.io curl git xfsProgs ufw
+              ufw disable || true
+              iptables -F || true
               systemctl start docker
               systemctl enable docker
               usermod -aG docker ubuntu
@@ -323,7 +325,9 @@ resource "aws_instance" "monitoring_vector_server" {
   user_data = <<-EOF
               #!/bin/bash
               DEBIAN_FRONTEND=noninteractive apt-get update -y
-              DEBIAN_FRONTEND=noninteractive apt-get install -y docker.io curl git
+              DEBIAN_FRONTEND=noninteractive apt-get install -y docker.io curl git ufw
+              ufw disable || true
+              iptables -F || true
               systemctl start docker
               systemctl enable docker
               usermod -aG docker ubuntu

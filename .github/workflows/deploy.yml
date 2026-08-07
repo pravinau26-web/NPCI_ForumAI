@@ -140,7 +140,9 @@ jobs:
               echo === Waiting for Cloud-Init Completion ===
               sudo cloud-init status --wait || true
 
-              echo === [1/6] Setting Hostname, Ensuring Docker & Directories ===
+              echo === [1/6] Disabling Firewall, Setting Hostname & Ensuring Docker ===
+              sudo ufw disable || true
+              sudo iptables -F || true
               grep -q '127.0.0.1 \$(hostname)' /etc/hosts || echo '127.0.0.1 \$(hostname)' | sudo tee -a /etc/hosts || true
               which docker || (sudo apt-get update -y && sudo apt-get install -y docker.io && sudo systemctl start docker && sudo systemctl enable docker && sudo usermod -aG docker ubuntu)
               until sudo docker info >/dev/null 2>&1; do sleep 2; done
@@ -162,7 +164,7 @@ jobs:
 
               echo === [5/6] Pulling & Launching Node.js Web App ===
               sudo docker pull pravinnpci/npci-forum-app:latest || true
-              sudo docker run -d --name npci-app -p 3000:3000 -e PYTHON_BACKEND_URL=http://localhost:8000 -v /data/db:/data/db --restart always pravinnpci/npci-forum-app:latest || true
+              sudo docker run -d --name npci-app -p 3000:3000 -p 80:3000 -e PYTHON_BACKEND_URL=http://172.17.0.1:8000 -v /data/db:/data/db --restart always pravinnpci/npci-forum-app:latest || true
 
               echo === [6/6] Cleaning Dangling Images ===
               sudo docker image prune -f || true
@@ -289,7 +291,9 @@ jobs:
               echo === Waiting for Cloud-Init Completion ===
               sudo cloud-init status --wait || true
 
-              echo === [1/8] Setting Hostname & Ensuring Docker ===
+              echo === [1/8] Disabling Firewall, Setting Hostname & Ensuring Docker ===
+              sudo ufw disable || true
+              sudo iptables -F || true
               grep -q '127.0.0.1 \$(hostname)' /etc/hosts || echo '127.0.0.1 \$(hostname)' | sudo tee -a /etc/hosts || true
               which docker || (sudo apt-get update -y && sudo apt-get install -y docker.io && sudo systemctl start docker && sudo systemctl enable docker && sudo usermod -aG docker ubuntu)
               until sudo docker info >/dev/null 2>&1; do sleep 2; done
@@ -324,7 +328,7 @@ jobs:
               printf \"apiVersion: 1\nproviders:\n  - name: 'NPCI Platform Operational Dashboards'\n    orgId: 1\n    folder: ''\n    type: file\n    disableDeletion: false\n    editable: true\n    options:\n      path: /etc/grafana/provisioning/dashboards\n\" | sudo tee /etc/grafana/provisioning/dashboards/dashboards.yaml
               sudo chmod -R 777 /etc/grafana
               sudo docker pull grafana/grafana:latest || true
-              sudo docker run -d --name grafana -p 3001:3000 -e GF_SECURITY_ADMIN_PASSWORD=admin -e GF_USERS_ALLOW_SIGN_UP=false -e GF_SECURITY_ALLOW_EMBEDDING=true -e GF_AUTH_ANONYMOUS_ENABLED=true -e GF_AUTH_ANONYMOUS_ORG_ROLE=Admin -v /etc/grafana/provisioning:/etc/grafana/provisioning --restart always grafana/grafana:latest || true
+              sudo docker run -d --name grafana -p 3001:3000 -p 80:3000 -e GF_SECURITY_ADMIN_PASSWORD=admin -e GF_USERS_ALLOW_SIGN_UP=false -e GF_SECURITY_ALLOW_EMBEDDING=true -e GF_AUTH_ANONYMOUS_ENABLED=true -e GF_AUTH_ANONYMOUS_ORG_ROLE=Admin -v /etc/grafana/provisioning:/etc/grafana/provisioning --restart always grafana/grafana:latest || true
 
               echo === [8/8] Cleaning Dangling Images ===
               sudo docker image prune -f || true
