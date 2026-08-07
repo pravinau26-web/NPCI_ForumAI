@@ -13,6 +13,11 @@ output "ec2_instance_id" {
   description = "The EC2 instance ID"
 }
 
+output "monitoring_instance_id" {
+  value       = aws_instance.monitoring_vector_server.id
+  description = "The EC2 instance ID for monitoring server"
+}
+
 output "ec2_public_ip" {
   value       = length(data.aws_eip.app_eip) > 0 ? data.aws_eip.app_eip[0].public_ip : aws_instance.app_server.public_ip
   description = "The public IP address (or static Elastic IP) of the primary EC2 instance"

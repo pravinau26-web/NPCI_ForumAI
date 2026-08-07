@@ -57,6 +57,13 @@ jobs:
           terraform init -reconfigure -backend-config="region=${{ secrets.AWS_REGION || 'ap-south-2' }}"
           terraform plan -out=tfplan
           terraform apply -auto-approve tfplan
+          APP_ID=$(terraform output -raw ec2_instance_id | tr -d '\r\n')
+          MON_ID=$(terraform output -raw monitoring_instance_id | tr -d '\r\n')
+
+          echo "Ensuring EC2 instances ($APP_ID, $MON_ID) are started and running in AWS..."
+          aws ec2 start-instances --instance-ids "$APP_ID" "$MON_ID" --region ${{ secrets.AWS_REGION || 'ap-south-2' }} 2>/dev/null || true
+          aws ec2 wait instance-running --instance-ids "$APP_ID" "$MON_ID" --region ${{ secrets.AWS_REGION || 'ap-south-2' }} 2>/dev/null || true
+
           EC2_IP=$(terraform output -raw ec2_public_ip | tr -d '\r\n')
           MONITORING_IP=$(terraform output -raw monitoring_ec2_public_ip | tr -d '\r\n')
           S3_BUCKET=$(terraform output -raw s3_bucket_name | tr -d '\r\n')
@@ -105,8 +112,23 @@ jobs:
       - name: Checkout Code Repository
         uses: actions/checkout@v4
 
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION || 'ap-south-2' }}
+
       - name: Deploy Core Services to 1st EC2 Node
         run: |
+          STOPPED_INSTANCES=$(aws ec2 describe-instances --region ${{ secrets.AWS_REGION || 'ap-south-2' }} --filters "Name=tag:Name,Values=npci-forum-app-node,npci-forum-monitoring-vector-node" "Name=instance-state-name,Values=stopped,stopping" --query "Reservations[*].Instances[*].InstanceId" --output text)
+          if [ -n "$STOPPED_INSTANCES" ] && [ "$STOPPED_INSTANCES" != "None" ]; then
+            echo "Powering on stopped EC2 instances: $STOPPED_INSTANCES"
+            aws ec2 start-instances --instance-ids $STOPPED_INSTANCES --region ${{ secrets.AWS_REGION || 'ap-south-2' }} || true
+            aws ec2 wait instance-running --instance-ids $STOPPED_INSTANCES --region ${{ secrets.AWS_REGION || 'ap-south-2' }} || true
+            sleep 10
+          fi
+
           EC2_IP="${{ needs.infrastructure.outputs.ec2_ip }}"
           SSH_KEY="${{ needs.infrastructure.outputs.ec2_ssh_key }}"
           if [ -z "${SSH_KEY}" ]; then
@@ -270,8 +292,23 @@ jobs:
       - name: Checkout Code Repository
         uses: actions/checkout@v4
 
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION || 'ap-south-2' }}
+
       - name: Deploy MCP, Vector DB & Prometheus/Grafana to 2nd EC2 Node
         run: |
+          STOPPED_INSTANCES=$(aws ec2 describe-instances --region ${{ secrets.AWS_REGION || 'ap-south-2' }} --filters "Name=tag:Name,Values=npci-forum-app-node,npci-forum-monitoring-vector-node" "Name=instance-state-name,Values=stopped,stopping" --query "Reservations[*].Instances[*].InstanceId" --output text)
+          if [ -n "$STOPPED_INSTANCES" ] && [ "$STOPPED_INSTANCES" != "None" ]; then
+            echo "Powering on stopped EC2 instances: $STOPPED_INSTANCES"
+            aws ec2 start-instances --instance-ids $STOPPED_INSTANCES --region ${{ secrets.AWS_REGION || 'ap-south-2' }} || true
+            aws ec2 wait instance-running --instance-ids $STOPPED_INSTANCES --region ${{ secrets.AWS_REGION || 'ap-south-2' }} || true
+            sleep 10
+          fi
+
           EC2_IP="${{ needs.infrastructure.outputs.ec2_ip }}"
           MONITORING_IP="${{ needs.infrastructure.outputs.monitoring_ec2_ip }}"
           if [ -z "${MONITORING_IP}" ]; then
