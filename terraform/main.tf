@@ -307,16 +307,6 @@ resource "aws_instance" "app_server" {
   }
 }
 
-# Elastic IP allocation for persistent static IP addressing
-resource "aws_eip" "app_eip" {
-  instance = aws_instance.app_server.id
-  domain   = "vpc"
-
-  tags = {
-    Name = "npci-forum-app-eip"
-  }
-}
-
 # 9. EC2 Instance 2: Dedicated Monitoring & Vector DB Node (Prometheus, Grafana, Vector DB RAG Store)
 resource "aws_instance" "monitoring_vector_server" {
   ami                         = data.aws_ami.ubuntu.id
