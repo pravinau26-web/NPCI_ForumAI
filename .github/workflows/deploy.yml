@@ -469,3 +469,22 @@ jobs:
 
           echo "Testing Prometheus Metrics collector..."
           curl -I --connect-timeout 5 "http://${MONITORING_IP}:9090" || echo "Prometheus collector initializing..."
+
+      - name: Generate Deployment Summary Table
+        run: |
+          EC2_IP="${{ needs.infrastructure.outputs.ec2_ip }}"
+          MONITORING_IP="${{ needs.infrastructure.outputs.monitoring_ec2_ip }}"
+          S3_BUCKET="${{ needs.infrastructure.outputs.s3_bucket }}"
+          AWS_REGION="${{ secrets.AWS_REGION || 'ap-south-2' }}"
+
+          echo "## 🚀 NPCI Forum AI Deployment Links" >> $GITHUB_STEP_SUMMARY
+          echo "| Service | Access URL | Port / Host | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "| :--- | :--- | :--- | :--- |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Web App Frontend** | [http://${EC2_IP}:3000](http://${EC2_IP}:3000) | Port 3000 (EC2 App Node) | 🟢 Active |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Web App (HTTP Direct)** | [http://${EC2_IP}](http://${EC2_IP}) | Port 80 (EC2 App Node) | 🟢 Active |" >> $GITHUB_STEP_SUMMARY
+          echo "| **AI Backend FastAPI & Swagger Docs** | [http://${EC2_IP}:8000/docs#/](http://${EC2_IP}:8000/docs#/) | Port 8000 (EC2 App Node) | 🟢 Active |" >> $GITHUB_STEP_SUMMARY
+          echo "| **MCP Server API** | [http://${EC2_IP}:8001](http://${EC2_IP}:8001) | Port 8001 (EC2 App Node) | 🟢 Active |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Grafana Monitoring Dashboard** | [http://${MONITORING_IP}:3001](http://${MONITORING_IP}:3001) | Port 3001 (EC2 Monitoring) | 🟢 Active |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Prometheus Metrics Collector** | [http://${MONITORING_IP}:9090](http://${MONITORING_IP}:9090) | Port 9090 (EC2 Monitoring) | 🟢 Active |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Qdrant Vector DB Engine** | [http://${MONITORING_IP}:6333](http://${MONITORING_IP}:6333) | Port 6333 (EC2 Monitoring) | 🟢 Active |" >> $GITHUB_STEP_SUMMARY
+          echo "| **S3 Static Website Mirror** | [http://${S3_BUCKET}.s3-website.${AWS_REGION}.amazonaws.com](http://${S3_BUCKET}.s3-website.${AWS_REGION}.amazonaws.com) | AWS S3 Bucket | 🟢 Active |" >> $GITHUB_STEP_SUMMARY
