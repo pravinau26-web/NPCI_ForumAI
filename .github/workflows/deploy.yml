@@ -130,6 +130,10 @@ jobs:
           fi
 
           EC2_IP="${{ needs.infrastructure.outputs.ec2_ip }}"
+          AWS_IP=$(aws ec2 describe-instances --region ${{ secrets.AWS_REGION || 'ap-south-2' }} --filters "Name=tag:Name,Values=npci-forum-app-node" "Name=instance-state-name,Values=running" --query "Reservations[0].Instances[0].PublicIpAddress" --output text 2>/dev/null || true)
+          if [ -n "$AWS_IP" ] && [ "$AWS_IP" != "None" ]; then
+            EC2_IP="$AWS_IP"
+          fi
           SSH_KEY="${{ needs.infrastructure.outputs.ec2_ssh_key }}"
           if [ -z "${SSH_KEY}" ]; then
             SSH_KEY="${{ secrets.EC2_SSH_KEY }}"
@@ -140,23 +144,23 @@ jobs:
             mkdir -p ~/.ssh
             echo "${SSH_KEY}" > ~/.ssh/id_rsa
             chmod 600 ~/.ssh/id_rsa
-            printf "Host *\n  StrictHostKeyChecking no\n  UserKnownHostsFile /dev/null\n  ServerAliveInterval 15\n  ServerAliveCountMax 10\n  ConnectTimeout 20\n  ConnectionAttempts 1\n  BatchMode yes\n" > ~/.ssh/config
+            printf "Host *\n  StrictHostKeyChecking no\n  UserKnownHostsFile /dev/null\n  ServerAliveInterval 15\n  ServerAliveCountMax 10\n  ConnectTimeout 30\n  ConnectionAttempts 3\n" > ~/.ssh/config
             chmod 600 ~/.ssh/config
             ssh-keyscan -T 15 -H ${EC2_IP} >> ~/.ssh/known_hosts 2>/dev/null || true
 
             echo "Deploying Core App Services to 1st EC2 Node (${EC2_IP})..."
             SSH_READY=0
-            for attempt in {1..30}; do
-              if ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=no ubuntu@${EC2_IP} "echo 'SSH Connection Established to 1st EC2'"; then
+            for attempt in {1..40}; do
+              if ssh -o ConnectTimeout=15 -o StrictHostKeyChecking=no ubuntu@${EC2_IP} "echo 'SSH Connection Established to 1st EC2'"; then
                 SSH_READY=1
                 break
               fi
-              echo "Waiting for SSH connection on 1st EC2 (Attempt $attempt/30)..."
+              echo "Waiting for SSH connection on 1st EC2 (Attempt $attempt/40)..."
               sleep 5
             done
 
             if [ "$SSH_READY" -ne 1 ]; then
-              echo "Error: Failed to connect via SSH to 1st EC2 (${EC2_IP}) after 30 attempts."
+              echo "Error: Failed to connect via SSH to 1st EC2 (${EC2_IP}) after 40 attempts."
               exit 1
             fi
 
@@ -312,7 +316,10 @@ jobs:
 
           EC2_IP="${{ needs.infrastructure.outputs.ec2_ip }}"
           MONITORING_IP="${{ needs.infrastructure.outputs.monitoring_ec2_ip }}"
-          if [ -z "${MONITORING_IP}" ]; then
+          AWS_MON_IP=$(aws ec2 describe-instances --region ${{ secrets.AWS_REGION || 'ap-south-2' }} --filters "Name=tag:Name,Values=npci-forum-monitoring-vector-node" "Name=instance-state-name,Values=running" --query "Reservations[0].Instances[0].PublicIpAddress" --output text 2>/dev/null || true)
+          if [ -n "$AWS_MON_IP" ] && [ "$AWS_MON_IP" != "None" ]; then
+            MONITORING_IP="$AWS_MON_IP"
+          elif [ -z "${MONITORING_IP}" ]; then
             MONITORING_IP="${EC2_IP}"
           fi
           SSH_KEY="${{ needs.infrastructure.outputs.ec2_ssh_key }}"
@@ -325,23 +332,23 @@ jobs:
             mkdir -p ~/.ssh
             echo "${SSH_KEY}" > ~/.ssh/id_rsa
             chmod 600 ~/.ssh/id_rsa
-            printf "Host *\n  StrictHostKeyChecking no\n  UserKnownHostsFile /dev/null\n  ServerAliveInterval 15\n  ServerAliveCountMax 10\n  ConnectTimeout 20\n  ConnectionAttempts 1\n  BatchMode yes\n" > ~/.ssh/config
+            printf "Host *\n  StrictHostKeyChecking no\n  UserKnownHostsFile /dev/null\n  ServerAliveInterval 15\n  ServerAliveCountMax 10\n  ConnectTimeout 30\n  ConnectionAttempts 3\n" > ~/.ssh/config
             chmod 600 ~/.ssh/config
             ssh-keyscan -T 15 -H ${MONITORING_IP} >> ~/.ssh/known_hosts 2>/dev/null || true
 
             echo "Deploying MCP, Vector DB, Prometheus & Grafana to 2nd EC2 Node (${MONITORING_IP})..."
             SSH_READY=0
-            for attempt in {1..30}; do
-              if ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=no ubuntu@${MONITORING_IP} "echo 'SSH Connection Established to 2nd EC2'"; then
+            for attempt in {1..40}; do
+              if ssh -o ConnectTimeout=15 -o StrictHostKeyChecking=no ubuntu@${MONITORING_IP} "echo 'SSH Connection Established to 2nd EC2'"; then
                 SSH_READY=1
                 break
               fi
-              echo "Waiting for SSH connection on 2nd EC2 (Attempt $attempt/30)..."
+              echo "Waiting for SSH connection on 2nd EC2 (Attempt $attempt/40)..."
               sleep 5
             done
 
             if [ "$SSH_READY" -ne 1 ]; then
-              echo "Error: Failed to connect via SSH to 2nd EC2 (${MONITORING_IP}) after 30 attempts."
+              echo "Error: Failed to connect via SSH to 2nd EC2 (${MONITORING_IP}) after 40 attempts."
               exit 1
             fi
 
