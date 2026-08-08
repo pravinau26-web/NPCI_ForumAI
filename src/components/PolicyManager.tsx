@@ -16,6 +16,7 @@ interface PolicyManagerProps {
     version: string;
     chunks: { section: string; text: string }[];
     type?: "spec" | "complaint";
+    parentPolicyTitle?: string;
   }) => Promise<string>;
   auditLogs: AuditLog[];
   onViewPdf?: (fileName: string, title?: string) => void;
@@ -33,14 +34,20 @@ export default function PolicyManager({
   users = [],
 }: PolicyManagerProps) {
   const [showUploadForm, setShowUploadForm] = useState(false);
-  const [title, setTitle] = useState("");
+  const [titleMode, setTitleMode] = useState<"preset" | "custom">("custom");
+  const [selectedPresetTitle, setSelectedPresetTitle] = useState("");
+  const [customTitleInput, setCustomTitleInput] = useState("");
+  const [isSubCompliance, setIsSubCompliance] = useState(false);
+  const [parentPolicyTitle, setParentPolicyTitle] = useState("");
+
   const [description, setDescription] = useState("");
-  const [version, setVersion] = useState("");
+  const [version, setVersion] = useState("v1.0");
   const [fileName, setFileName] = useState("");
   const [docType, setDocType] = useState<"spec" | "complaint">("spec");
   const [sections, setSections] = useState<{ section: string; text: string }[]>([
-    { section: "Transaction Limits", text: "" },
+    { section: "Operational Guidelines", text: "" },
   ]);
+  const [formError, setFormError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [aiChangelogResult, setAiChangelogResult] = useState("");
   const [expandedPolicyId, setExpandedPolicyId] = useState<string | null>(null);
@@ -51,6 +58,23 @@ export default function PolicyManager({
     { role: "assistant", content: "Hello! I am the Compliance Assistant. Ask me questions about NPCI policies, specs, or limits, and I will search the database to give you an answer based on uploaded documents." }
   ]);
   const [isChatLoading, setIsChatLoading] = useState(false);
+
+  const handleDocTypeChange = (newType: "spec" | "complaint") => {
+    setDocType(newType);
+    setFormError(null);
+    if (newType === "complaint") {
+      setSections([
+        { section: "Incident Summary & Audit Breach", text: "" },
+        { section: "Root Cause & Impacted Switch Endpoints", text: "" },
+        { section: "Remediation Target & SLA Directive", text: "" },
+      ]);
+    } else {
+      setSections([
+        { section: "Operational Guidelines", text: "" },
+        { section: "Transaction Limits & Rules", text: "" },
+      ]);
+    }
+  };
 
   const handleAskAssistant = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -90,6 +114,7 @@ export default function PolicyManager({
     return (
       doc.title.toLowerCase().includes(q) ||
       (doc.description && doc.description.toLowerCase().includes(q)) ||
+      (doc.parentPolicyTitle && doc.parentPolicyTitle.toLowerCase().includes(q)) ||
       doc.chunks.some(
         (chunk) =>
           chunk.section.toLowerCase().includes(q) ||
@@ -116,31 +141,60 @@ export default function PolicyManager({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title || !version || sections.some(s => !s.section || !s.text)) return;
+    setFormError(null);
+
+    const activeTitle = titleMode === "preset" ? selectedPresetTitle : customTitleInput.trim();
+
+    if (!activeTitle) {
+      setFormError("Document title is required. Select an existing policy or enter a fresh custom title.");
+      return;
+    }
+
+    if (activeTitle.length < 3) {
+      setFormError("Document title must be at least 3 characters long.");
+      return;
+    }
+
+    if (!version.trim()) {
+      setFormError("Version identifier is required (e.g. v1.0, 2026.1).");
+      return;
+    }
+
+    if (sections.some((s) => !s.section.trim() || !s.text.trim())) {
+      setFormError("All grounded section chunks must contain both a Section Title and non-empty guideline text.");
+      return;
+    }
 
     setIsSubmitting(true);
     setAiChangelogResult("");
     try {
-      const defaultFileName = fileName || `${title.replace(/\s+/g, "_")}_v${version}.pdf`;
+      const defaultFileName = fileName.trim() || `${activeTitle.replace(/[^a-zA-Z0-9_-]/g, "_")}_${version.replace(/\./g, "_")}.pdf`;
       const changelog = await onUploadPolicy({
-        title,
-        description,
+        title: activeTitle,
+        description: description.trim(),
         fileName: defaultFileName,
-        version,
-        chunks: sections,
+        version: version.trim(),
+        chunks: sections.map(s => ({ section: s.section.trim(), text: s.text.trim() })),
         type: docType,
+        parentPolicyTitle: isSubCompliance && parentPolicyTitle ? parentPolicyTitle : undefined
       });
       setAiChangelogResult(changelog);
+
       // Reset form
-      setTitle("");
+      setSelectedPresetTitle("");
+      setCustomTitleInput("");
+      setParentPolicyTitle("");
+      setIsSubCompliance(false);
       setDescription("");
-      setVersion("");
+      setVersion("v1.0");
       setFileName("");
       setDocType("spec");
-      setSections([{ section: "Transaction Limits", text: "" }]);
+      setSections([{ section: "Operational Guidelines", text: "" }]);
+      setFormError(null);
       setShowUploadForm(false);
     } catch (err) {
       console.error(err);
+      setFormError("Failed to ingest policy document. Please check connection and try again.");
     } finally {
       setIsSubmitting(false);
     }
@@ -164,12 +218,13 @@ export default function PolicyManager({
           <button
             onClick={() => {
               setShowUploadForm(!showUploadForm);
+              setFormError(null);
               setAiChangelogResult("");
             }}
             className="bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold px-4 py-2.5 rounded-xl transition flex items-center gap-1.5 shadow"
           >
             <Upload className="w-4 h-4 text-cyan-400 animate-pulse" />
-            <span>Upload New Policy Version</span>
+            <span>{showUploadForm ? "Close Ingestion Form" : "Upload New Policy / Complaint"}</span>
           </button>
         )}
       </div>
@@ -203,27 +258,67 @@ export default function PolicyManager({
           {/* Policy Ingestion Composer Drawer */}
           {showUploadForm && (
             <div className="bg-white dark:bg-slate-900 dark:text-slate-100 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-lg p-6 space-y-4 animate-in slide-in-from-top-4 duration-200">
-              <div className="flex justify-between items-center border-b border-slate-100 pb-3">
-                <h3 className="font-bold text-slate-800 text-sm flex items-center gap-2">
+              <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-3">
+                <h3 className="font-bold text-slate-800 dark:text-slate-200 text-sm flex items-center gap-2">
                   <Layers className="w-4 h-4 text-blue-600" />
-                  <span>Ingest / Update Policy Specs</span>
+                  <span>Ingest Policy Spec / System Complaint</span>
                 </h3>
                 <span className="text-[10px] bg-emerald-100 text-emerald-700 font-mono font-bold px-2 py-0.5 rounded">
                   RAG Embeddings Primed
                 </span>
               </div>
 
+              {formError && (
+                <div className="p-3 bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 rounded-xl text-xs flex items-center gap-2 font-medium">
+                  <AlertTriangle className="w-4 h-4 shrink-0" />
+                  <span>{formError}</span>
+                </div>
+              )}
+
               <form onSubmit={handleSubmit} className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1.5">
-                      Document Title
+                {/* Mode Selector: Preset vs Custom Title */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase">
+                      Document Title Source
                     </label>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setTitleMode("custom");
+                          setFormError(null);
+                        }}
+                        className={`text-[10px] px-2.5 py-1 rounded-lg font-bold transition ${
+                          titleMode === "custom"
+                            ? "bg-blue-600 text-white"
+                            : "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300"
+                        }`}
+                      >
+                        ➕ Custom New Title
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setTitleMode("preset");
+                          setFormError(null);
+                        }}
+                        className={`text-[10px] px-2.5 py-1 rounded-lg font-bold transition ${
+                          titleMode === "preset"
+                            ? "bg-blue-600 text-white"
+                            : "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300"
+                        }`}
+                      >
+                        📋 Choose Existing Master Policy
+                      </button>
+                    </div>
+                  </div>
+
+                  {titleMode === "preset" ? (
                     <select
-                      value={title}
+                      value={selectedPresetTitle}
                       onChange={(e) => {
-                        setTitle(e.target.value);
-                        // Suggest pre-made details
+                        setSelectedPresetTitle(e.target.value);
                         if (e.target.value === "NPCI UPI 2.0 Compliance Guide") {
                           setDescription("Rules regarding UPI transaction limits, MCC eligibility, merchant onboarding risk, and Unified Dispute Redressal (UDIR).");
                         } else if (e.target.value === "RuPay Card Security Protocol") {
@@ -233,51 +328,84 @@ export default function PolicyManager({
                         }
                       }}
                       required
-                      className="w-full bg-slate-50 text-slate-800 px-3 py-2 rounded-xl text-xs border border-slate-200 focus:outline-none"
+                      className="w-full bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 px-3 py-2 rounded-xl text-xs border border-slate-200 dark:border-slate-800 focus:outline-none"
                     >
-                      <option value="">-- Choose Existing or Enter Custom --</option>
+                      <option value="">-- Select Master Document --</option>
                       <option value="NPCI UPI 2.0 Compliance Guide">NPCI UPI 2.0 Compliance Guide</option>
                       <option value="RuPay Card Security Protocol">RuPay Card Security Protocol</option>
                       <option value="AePS Operation Guidelines 2026">AePS Operation Guidelines 2026</option>
+                      {policies.map(p => (
+                        <option key={p.id} value={p.title}>{p.title}</option>
+                      ))}
                     </select>
-                    {/* Allow custom input if select is empty */}
-                    {!title && (
-                      <input
-                        type="text"
-                        placeholder="Enter custom policy title"
-                        value={title}
-                        onChange={(e) => setTitle(e.target.value)}
-                        className="w-full mt-2 bg-slate-50 text-slate-800 px-3 py-2 rounded-xl text-xs border border-slate-200 focus:outline-none"
-                      />
-                    )}
-                  </div>
+                  ) : (
+                    <input
+                      type="text"
+                      required
+                      placeholder="Enter new policy title (e.g. AePS Operation Guidelines 2026 - Sub-Compliance Delta or Audit Complaint #402)"
+                      value={customTitleInput}
+                      onChange={(e) => setCustomTitleInput(e.target.value)}
+                      className="w-full bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 px-3 py-2 rounded-xl text-xs border border-slate-200 dark:border-slate-800 focus:outline-none font-semibold"
+                    />
+                  )}
+                </div>
 
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1.5">
-                        New Version Number
-                      </label>
-                      <input
-                        type="text"
-                        required
-                        placeholder="e.g. 2.2"
-                        value={version}
-                        onChange={(e) => setVersion(e.target.value)}
-                        className="w-full bg-slate-50 text-slate-800 px-3 py-2 rounded-xl text-xs border border-slate-200 focus:outline-none font-mono"
-                      />
+                {/* Sub-compliance parent link toggle */}
+                <div className="bg-slate-50 dark:bg-slate-950 p-3 rounded-xl border border-slate-200/60 dark:border-slate-800/60 space-y-2">
+                  <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-700 dark:text-slate-300">
+                    <input
+                      type="checkbox"
+                      checked={isSubCompliance}
+                      onChange={(e) => setIsSubCompliance(e.target.checked)}
+                      className="rounded text-blue-600 focus:ring-blue-500"
+                    />
+                    <span>Is this a Sub-Compliance under a Master Policy? (e.g. under AePS Operation Guidelines 2026)</span>
+                  </label>
+
+                  {isSubCompliance && (
+                    <div className="pt-1">
+                      <select
+                        value={parentPolicyTitle}
+                        onChange={(e) => setParentPolicyTitle(e.target.value)}
+                        className="w-full bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 px-3 py-1.5 rounded-lg text-xs border border-slate-200 dark:border-slate-800 focus:outline-none"
+                      >
+                        <option value="">-- Select Parent Specification --</option>
+                        <option value="AePS Operation Guidelines 2026">AePS Operation Guidelines 2026</option>
+                        <option value="NPCI UPI 2.0 Compliance Guide">NPCI UPI 2.0 Compliance Guide</option>
+                        <option value="RuPay Card Security Protocol">RuPay Card Security Protocol</option>
+                        {policies.map(p => (
+                          <option key={p.id} value={p.title}>{p.title}</option>
+                        ))}
+                      </select>
                     </div>
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1.5">
-                        File Name (Simulated)
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="e.g. UPI_v2.2.pdf"
-                        value={fileName}
-                        onChange={(e) => setFileName(e.target.value)}
-                        className="w-full bg-slate-50 text-slate-800 px-3 py-2 rounded-xl text-xs border border-slate-200 focus:outline-none font-mono"
-                      />
-                    </div>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1.5">
+                      New Version Number
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. v1.0 or 2026.2"
+                      value={version}
+                      onChange={(e) => setVersion(e.target.value)}
+                      className="w-full bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 px-3 py-2 rounded-xl text-xs border border-slate-200 dark:border-slate-800 focus:outline-none font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1.5">
+                      File Name (Simulated PDF)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. AePS_SubCompliance_v1.0.pdf"
+                      value={fileName}
+                      onChange={(e) => setFileName(e.target.value)}
+                      className="w-full bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 px-3 py-2 rounded-xl text-xs border border-slate-200 dark:border-slate-800 focus:outline-none font-mono"
+                    />
                   </div>
                 </div>
 
@@ -288,7 +416,7 @@ export default function PolicyManager({
                   <div className="grid grid-cols-2 gap-3">
                     <button
                       type="button"
-                      onClick={() => setDocType("spec")}
+                      onClick={() => handleDocTypeChange("spec")}
                       className={`py-2 px-3 rounded-xl border text-xs font-bold transition flex items-center justify-center gap-2 cursor-pointer ${
                         docType === "spec"
                           ? "bg-blue-50 border-blue-500 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800"
@@ -300,7 +428,7 @@ export default function PolicyManager({
                     </button>
                     <button
                       type="button"
-                      onClick={() => setDocType("complaint")}
+                      onClick={() => handleDocTypeChange("complaint")}
                       className={`py-2 px-3 rounded-xl border text-xs font-bold transition flex items-center justify-center gap-2 cursor-pointer ${
                         docType === "complaint"
                           ? "bg-rose-50 border-rose-500 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800"
@@ -315,25 +443,27 @@ export default function PolicyManager({
 
                 <div>
                   <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1.5">
-                    Brief Summary description
+                    Brief Summary Description
                   </label>
                   <input
                     type="text"
                     placeholder="Short summary of this compliance spec or complaint report..."
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
-                    className="w-full bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 px-3 py-2 rounded-xl text-xs border border-slate-200 dark:border-slate-800 focus:outline-none"
+                    className="w-full bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 px-3 py-2 rounded-xl text-xs border border-slate-200 dark:border-slate-800 focus:outline-none"
                   />
                 </div>
 
                 {/* Chunks/Sections array editor */}
                 <div className="space-y-3 pt-2">
                   <div className="flex justify-between items-center">
-                    <span className="text-xs font-bold text-slate-600 uppercase">Grounded policy Chunks</span>
+                    <span className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase">
+                      Sub-Compliances / Grounded Policy Chunks
+                    </span>
                     <button
                       type="button"
                       onClick={handleAddSection}
-                      className="text-xs text-blue-600 hover:text-blue-800 font-bold flex items-center gap-0.5 cursor-pointer"
+                      className="text-xs text-blue-600 dark:text-blue-400 hover:underline font-bold flex items-center gap-0.5 cursor-pointer"
                     >
                       <Plus className="w-3.5 h-3.5" />
                       <span>Add Section Chunk</span>
@@ -342,15 +472,15 @@ export default function PolicyManager({
 
                   <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
                     {sections.map((sec, index) => (
-                      <div key={index} className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2 relative">
+                      <div key={index} className="bg-slate-50 dark:bg-slate-950 p-4 rounded-xl border border-slate-200 dark:border-slate-800 space-y-2 relative">
                         <div className="flex justify-between items-center gap-4">
                           <input
                             type="text"
                             required
-                            placeholder="Section Title (e.g. Transaction Limits)"
+                            placeholder="Section Title (e.g. Biometric Authentication Standards)"
                             value={sec.section}
                             onChange={(e) => handleSectionChange(index, "section", e.target.value)}
-                            className="bg-white dark:bg-slate-900 dark:text-slate-100 text-slate-800 font-bold px-3 py-1.5 rounded-lg text-xs border border-slate-250 w-2/3 focus:outline-none"
+                            className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-bold px-3 py-1.5 rounded-lg text-xs border border-slate-200 dark:border-slate-800 w-2/3 focus:outline-none"
                           />
                           {sections.length > 1 && (
                             <button
@@ -367,30 +497,30 @@ export default function PolicyManager({
                           placeholder="Section text guidelines... Write descriptive specifications so the AI RAG engine can ground and cite properly!"
                           value={sec.text}
                           onChange={(e) => handleSectionChange(index, "text", e.target.value)}
-                          className="w-full bg-white dark:bg-slate-900 dark:text-slate-100 text-slate-700 p-2.5 rounded-lg text-xs border border-slate-200 dark:border-slate-800 h-20 resize-none focus:outline-none"
+                          className="w-full bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 p-2.5 rounded-lg text-xs border border-slate-200 dark:border-slate-800 h-20 resize-none focus:outline-none"
                         />
                       </div>
                     ))}
                   </div>
                 </div>
 
-                <div className="flex justify-end gap-3 pt-2 border-t border-slate-100">
+                <div className="flex justify-end gap-3 pt-2 border-t border-slate-100 dark:border-slate-800">
                   <button
                     type="button"
                     onClick={() => setShowUploadForm(false)}
-                    className="px-4 py-2 rounded-xl text-xs font-medium hover:bg-slate-100 text-slate-500 cursor-pointer"
+                    className="px-4 py-2 rounded-xl text-xs font-medium hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 cursor-pointer"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
                     disabled={isSubmitting}
-                    className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl transition shadow flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                    className="px-4 py-2 bg-slate-900 dark:bg-blue-600 hover:bg-slate-800 dark:hover:bg-blue-700 text-white text-xs font-bold rounded-xl transition shadow flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
                   >
                     {isSubmitting ? (
                       <>
                         <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                        <span>Running AI version Diff...</span>
+                        <span>Indexing & Running AI Diff...</span>
                       </>
                     ) : (
                       <>
@@ -475,6 +605,12 @@ export default function PolicyManager({
                       </div>
 
                       <div className="space-y-1">
+                        {doc.parentPolicyTitle && (
+                          <div className="inline-flex items-center gap-1 text-[9px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 px-2 py-0.5 rounded-md border border-indigo-200 dark:border-indigo-900/50 mb-1">
+                            <span>Sub-Compliance under:</span>
+                            <span className="font-extrabold">{doc.parentPolicyTitle}</span>
+                          </div>
+                        )}
                         <h4 className="font-bold text-slate-800 dark:text-slate-100 text-sm leading-snug">{doc.title}</h4>
                         <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed text-left">
                           <MentionText text={doc.description} users={users} onViewProfile={onViewProfile} />

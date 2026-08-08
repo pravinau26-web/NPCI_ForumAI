@@ -1742,15 +1742,18 @@ app.post("/api/compliance/ask", async (req, res) => {
 });
 
 app.post("/api/policies", async (req, res) => {
-  const { title, description, fileName, version, uploadedBy, chunks, type } = req.body;
+  const { title, description, fileName, version, uploadedBy, chunks, type, parentPolicyTitle } = req.body;
   if (!title || !version || !uploadedBy || !chunks || chunks.length === 0) {
     return res.status(400).json({ error: "Title, version, uploadedBy and policy sections are required" });
   }
 
-  // Check if updating an existing policy to detect diffs (FR-11)
-  const existingIndex = policyDocuments.findIndex(p => p.title.toLowerCase() === title.toLowerCase());
-  let changelog = "";
   const docType = type === "complaint" ? "complaint" : "spec";
+
+  // Check if updating an existing policy to detect diffs (match title AND type)
+  const existingIndex = policyDocuments.findIndex(
+    p => p.title.toLowerCase() === title.toLowerCase() && (p.type || "spec") === docType
+  );
+  let changelog = "";
   const docIdForDb = existingIndex > -1 ? policyDocuments[existingIndex].id : `policy-${Date.now()}`;
 
   if (existingIndex > -1) {
@@ -1768,23 +1771,25 @@ app.post("/api/policies", async (req, res) => {
       uploadedBy,
       uploadedAt: new Date().toISOString(),
       chunks,
-      type: docType
+      type: docType,
+      parentPolicyTitle: parentPolicyTitle || oldPolicy.parentPolicyTitle
     };
   } else {
-    // Brand new policy
+    // Brand new policy or complaint
     const newPolicy: PolicyDocument = {
       id: docIdForDb,
       title,
       description: description || "",
-      fileName: fileName || "policy_document.pdf",
+      fileName: fileName || `${title.replace(/\s+/g, "_")}_v${version}.pdf`,
       version,
       uploadedBy,
       uploadedAt: new Date().toISOString(),
       chunks,
-      type: docType
+      type: docType,
+      parentPolicyTitle: parentPolicyTitle || undefined
     };
     policyDocuments.push(newPolicy);
-    changelog = `#### 🎉 New Compliance ${docType === "complaint" ? "Complaint Report" : "Document"} Uploaded: ${title}\n- **Version**: ${version}\n- **Status**: Active internal compliance ${docType === "complaint" ? "complaint" : "policy"}.\n- Sections added: ${chunks.map((c: any) => `*${c.section}*`).join(", ")}`;
+    changelog = `#### 🎉 New Compliance ${docType === "complaint" ? "System Complaint / Audit Breach" : "Document Specification"} Ingested: ${title}\n- **Version**: ${version}\n- **Status**: Active internal compliance ${docType === "complaint" ? "complaint record" : "policy"}.\n- Sections added: ${chunks.map((c: any) => `*${c.section}*`).join(", ")}`;
   }
 
   // Index chunks in simulated Vector DB

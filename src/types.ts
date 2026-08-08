@@ -109,6 +109,7 @@ export interface PolicyDocument {
   uploadedAt: string;
   chunks: PolicyChunk[];
   type?: "spec" | "complaint";
+  parentPolicyTitle?: string;
 }
 
 export interface PolicyDiff {
