@@ -62,7 +62,7 @@ jobs:
 
           echo "Ensuring EC2 instances ($APP_ID, $MON_ID) are started and running in AWS..."
           aws ec2 start-instances --instance-ids "$APP_ID" "$MON_ID" --region ${{ secrets.AWS_REGION || 'ap-south-2' }} 2>/dev/null || true
-          aws ec2 wait instance-running --instance-ids "$APP_ID" "$MON_ID" --region ${{ secrets.AWS_REGION || 'ap-south-2' }} 2>/dev/null || true
+          aws ec2 wait instance-status-ok --instance-ids "$APP_ID" "$MON_ID" --region ${{ secrets.AWS_REGION || 'ap-south-2' }} 2>/dev/null || true
 
           EC2_IP=$(terraform output -raw ec2_public_ip | tr -d '\r\n')
           MONITORING_IP=$(terraform output -raw monitoring_ec2_public_ip | tr -d '\r\n')
@@ -125,7 +125,7 @@ jobs:
           if [ -n "$STOPPED_INSTANCES" ] && [ "$STOPPED_INSTANCES" != "None" ]; then
             echo "Powering on stopped EC2 instances: $STOPPED_INSTANCES"
             aws ec2 start-instances --instance-ids $STOPPED_INSTANCES --region ${{ secrets.AWS_REGION || 'ap-south-2' }} || true
-            aws ec2 wait instance-running --instance-ids $STOPPED_INSTANCES --region ${{ secrets.AWS_REGION || 'ap-south-2' }} || true
+            aws ec2 wait instance-status-ok --instance-ids $STOPPED_INSTANCES --region ${{ secrets.AWS_REGION || 'ap-south-2' }} 2>/dev/null || true
             sleep 10
           fi
 
@@ -144,18 +144,18 @@ jobs:
             mkdir -p ~/.ssh
             echo "${SSH_KEY}" > ~/.ssh/id_rsa
             chmod 600 ~/.ssh/id_rsa
-            printf "Host *\n  StrictHostKeyChecking no\n  UserKnownHostsFile /dev/null\n  ServerAliveInterval 15\n  ServerAliveCountMax 10\n  ConnectTimeout 30\n  ConnectionAttempts 3\n" > ~/.ssh/config
+            printf "Host *\n  StrictHostKeyChecking no\n  UserKnownHostsFile /dev/null\n  ServerAliveInterval 15\n  ServerAliveCountMax 10\n  ConnectTimeout 10\n" > ~/.ssh/config
             chmod 600 ~/.ssh/config
-            ssh-keyscan -T 15 -H ${EC2_IP} >> ~/.ssh/known_hosts 2>/dev/null || true
 
             echo "Deploying Core App Services to 1st EC2 Node (${EC2_IP})..."
             SSH_READY=0
             for attempt in {1..40}; do
-              if ssh -o ConnectTimeout=15 -o StrictHostKeyChecking=no ubuntu@${EC2_IP} "echo 'SSH Connection Established to 1st EC2'"; then
+              ssh-keyscan -T 5 -H ${EC2_IP} >> ~/.ssh/known_hosts 2>/dev/null || true
+              if ssh -o ConnectTimeout=5 -o ConnectionAttempts=1 -o StrictHostKeyChecking=no ubuntu@${EC2_IP} "echo 'SSH Connection Established to 1st EC2'" 2>/dev/null; then
                 SSH_READY=1
                 break
               fi
-              echo "Waiting for SSH connection on 1st EC2 (Attempt $attempt/40)..."
+              echo "Waiting for SSH connection on 1st EC2 (${EC2_IP}) (Attempt $attempt/40)..."
               sleep 5
             done
 
@@ -310,7 +310,7 @@ jobs:
           if [ -n "$STOPPED_INSTANCES" ] && [ "$STOPPED_INSTANCES" != "None" ]; then
             echo "Powering on stopped EC2 instances: $STOPPED_INSTANCES"
             aws ec2 start-instances --instance-ids $STOPPED_INSTANCES --region ${{ secrets.AWS_REGION || 'ap-south-2' }} || true
-            aws ec2 wait instance-running --instance-ids $STOPPED_INSTANCES --region ${{ secrets.AWS_REGION || 'ap-south-2' }} || true
+            aws ec2 wait instance-status-ok --instance-ids $STOPPED_INSTANCES --region ${{ secrets.AWS_REGION || 'ap-south-2' }} 2>/dev/null || true
             sleep 10
           fi
 
@@ -332,18 +332,18 @@ jobs:
             mkdir -p ~/.ssh
             echo "${SSH_KEY}" > ~/.ssh/id_rsa
             chmod 600 ~/.ssh/id_rsa
-            printf "Host *\n  StrictHostKeyChecking no\n  UserKnownHostsFile /dev/null\n  ServerAliveInterval 15\n  ServerAliveCountMax 10\n  ConnectTimeout 30\n  ConnectionAttempts 3\n" > ~/.ssh/config
+            printf "Host *\n  StrictHostKeyChecking no\n  UserKnownHostsFile /dev/null\n  ServerAliveInterval 15\n  ServerAliveCountMax 10\n  ConnectTimeout 10\n" > ~/.ssh/config
             chmod 600 ~/.ssh/config
-            ssh-keyscan -T 15 -H ${MONITORING_IP} >> ~/.ssh/known_hosts 2>/dev/null || true
 
             echo "Deploying MCP, Vector DB, Prometheus & Grafana to 2nd EC2 Node (${MONITORING_IP})..."
             SSH_READY=0
             for attempt in {1..40}; do
-              if ssh -o ConnectTimeout=15 -o StrictHostKeyChecking=no ubuntu@${MONITORING_IP} "echo 'SSH Connection Established to 2nd EC2'"; then
+              ssh-keyscan -T 5 -H ${MONITORING_IP} >> ~/.ssh/known_hosts 2>/dev/null || true
+              if ssh -o ConnectTimeout=5 -o ConnectionAttempts=1 -o StrictHostKeyChecking=no ubuntu@${MONITORING_IP} "echo 'SSH Connection Established to 2nd EC2'" 2>/dev/null; then
                 SSH_READY=1
                 break
               fi
-              echo "Waiting for SSH connection on 2nd EC2 (Attempt $attempt/40)..."
+              echo "Waiting for SSH connection on 2nd EC2 (${MONITORING_IP}) (Attempt $attempt/40)..."
               sleep 5
             done
 
