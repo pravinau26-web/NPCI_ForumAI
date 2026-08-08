@@ -164,12 +164,13 @@ jobs:
               echo === Waiting for Cloud-Init Completion ===
               sudo cloud-init status --wait || true
 
-              echo === [1/6] Disabling Firewall, Setting Hostname & Ensuring Docker ===
+              echo === [1/6] Disabling Firewall, Setting Hostname, Ensuring Docker & Allocating 2GB Swap Memory ===
               sudo ufw disable || true
               sudo iptables -F || true
               grep -q '127.0.0.1 \$(hostname)' /etc/hosts || echo '127.0.0.1 \$(hostname)' | sudo tee -a /etc/hosts || true
               which docker || (sudo apt-get update -y && sudo apt-get install -y docker.io && sudo systemctl start docker && sudo systemctl enable docker && sudo usermod -aG docker ubuntu)
               until sudo docker info >/dev/null 2>&1; do sleep 2; done
+              sudo swapon -s | grep -q swapfile || (sudo fallocate -l 2G /swapfile 2>/dev/null || sudo dd if=/dev/zero of=/swapfile bs=1M count=2048 && sudo chmod 600 /swapfile && sudo mkswap /swapfile && sudo swapon /swapfile && sudo sysctl -w vm.swappiness=10) || true
               sudo mkdir -p /data/db/postgres /data/db/uploads && sudo chmod -R 777 /data/db
 
               echo === [2/6] Stopping Existing Core App Containers ===
@@ -351,12 +352,13 @@ jobs:
               echo === Waiting for Cloud-Init Completion ===
               sudo cloud-init status --wait || true
 
-              echo === [1/8] Disabling Firewall, Setting Hostname & Ensuring Docker ===
+              echo === [1/8] Disabling Firewall, Setting Hostname, Ensuring Docker & Allocating 2GB Swap Memory ===
               sudo ufw disable || true
               sudo iptables -F || true
               grep -q '127.0.0.1 \$(hostname)' /etc/hosts || echo '127.0.0.1 \$(hostname)' | sudo tee -a /etc/hosts || true
               which docker || (sudo apt-get update -y && sudo apt-get install -y docker.io && sudo systemctl start docker && sudo systemctl enable docker && sudo usermod -aG docker ubuntu)
               until sudo docker info >/dev/null 2>&1; do sleep 2; done
+              sudo swapon -s | grep -q swapfile || (sudo fallocate -l 2G /swapfile 2>/dev/null || sudo dd if=/dev/zero of=/swapfile bs=1M count=2048 && sudo chmod 600 /swapfile && sudo mkswap /swapfile && sudo swapon /swapfile && sudo sysctl -w vm.swappiness=10) || true
 
               echo === [2/8] Creating Directories, Docker Network & Copying Dashboards ===
               sudo mkdir -p /data/vector /etc/prometheus /etc/grafana/provisioning/datasources /etc/grafana/provisioning/dashboards

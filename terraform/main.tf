@@ -292,6 +292,17 @@ resource "aws_instance" "app_server" {
               systemctl enable docker
               usermod -aG docker ubuntu
 
+              # Create 2GB Swap File to prevent 97% RAM memory exhaustion & slowdowns
+              if ! swapon -s | grep -q swapfile; then
+                fallocate -l 2G /swapfile || dd if=/dev/zero of=/swapfile bs=1M count=2048
+                chmod 600 /swapfile
+                mkswap /swapfile
+                swapon /swapfile
+                echo '/swapfile none swap sw 0 0' >> /etc/fstab
+                echo 'vm.swappiness=10' >> /etc/sysctl.conf
+                sysctl -p || true
+              fi
+
               # Format and Mount AWS EBS Volume for DB Persistence if attached
               mkdir -p /data/db
               if ! blkid /dev/sdh && ! blkid /dev/xvdh && ! blkid /dev/nvme1n1; then
@@ -331,6 +342,17 @@ resource "aws_instance" "monitoring_vector_server" {
               systemctl start docker
               systemctl enable docker
               usermod -aG docker ubuntu
+
+              # Create 2GB Swap File to prevent 97% RAM memory exhaustion & slowdowns
+              if ! swapon -s | grep -q swapfile; then
+                fallocate -l 2G /swapfile || dd if=/dev/zero of=/swapfile bs=1M count=2048
+                chmod 600 /swapfile
+                mkswap /swapfile
+                swapon /swapfile
+                echo '/swapfile none swap sw 0 0' >> /etc/fstab
+                echo 'vm.swappiness=10' >> /etc/sysctl.conf
+                sysctl -p || true
+              fi
 
               mkdir -p /data/vector /etc/prometheus /etc/grafana/provisioning/datasources /etc/grafana/provisioning/dashboards
               chmod -R 777 /data/vector
