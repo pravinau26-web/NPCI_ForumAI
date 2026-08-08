@@ -60,6 +60,8 @@ export default function Sidebar({
   const [isPrivate, setIsPrivate] = useState(false);
   const [selectedAllowedUsers, setSelectedAllowedUsers] = useState<string[]>([]);
   const [selectedAllowedDepts, setSelectedAllowedDepts] = useState<string[]>([]);
+  const [creationError, setCreationError] = useState<string | null>(null);
+  const [attachedFiles, setAttachedFiles] = useState<any[]>([]);
 
   // Coworker search filtering
   const [coworkerSearch, setCoworkerSearch] = useState("");
@@ -70,21 +72,75 @@ export default function Sidebar({
   const [selectedGroupMembers, setSelectedGroupMembers] = useState<string[]>([]);
   const [groupSearchQuery, setGroupSearchQuery] = useState("");
 
+  const handleCommunityFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+    Array.from(files).forEach((fileObj: File) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        setAttachedFiles(prev => [
+          ...prev,
+          {
+            id: `file-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+            name: fileObj.name,
+            size: `${(fileObj.size / 1024).toFixed(1)} KB`,
+            type: fileObj.type || "application/octet-stream",
+            url: reader.result as string
+          }
+        ]);
+      };
+      reader.readAsDataURL(fileObj);
+    });
+  };
+
   const handleSubmitCommunity = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newCommName.trim()) return;
+    setCreationError(null);
+
+    const nameClean = newCommName.trim().replace(/\s+/g, "-").toLowerCase();
+
+    // SINGLE ISSUE VALIDATION GUARANTEE
+    if (!nameClean) {
+      setCreationError("Community name is required. Please provide a descriptive identifier.");
+      return;
+    }
+
+    if (nameClean.length < 3) {
+      setCreationError("Community name must be at least 3 characters long (e.g. #upi-switch).");
+      return;
+    }
+
+    if (!/^[a-z0-9\-_]+$/.test(nameClean)) {
+      setCreationError("Community name can only contain lowercase letters, numbers, and hyphens.");
+      return;
+    }
+
+    const isDuplicate = communities.some(c => c.name.toLowerCase() === nameClean);
+    if (isDuplicate) {
+      setCreationError(`A community with the name "#${nameClean}" already exists. Please choose a unique name.`);
+      return;
+    }
+
+    if (isPrivate && selectedAllowedUsers.length === 0 && selectedAllowedDepts.length === 0) {
+      setCreationError("Restricted communities require at least one allowed department or individual user.");
+      return;
+    }
+
     onCreateCommunity(
-      newCommName.trim(),
+      nameClean,
       newCommDesc.trim(),
       isPrivate,
       isPrivate ? selectedAllowedUsers : [],
       isPrivate ? selectedAllowedDepts : []
     );
+
     setNewCommName("");
     setNewCommDesc("");
     setIsPrivate(false);
     setSelectedAllowedUsers([]);
     setSelectedAllowedDepts([]);
+    setAttachedFiles([]);
+    setCreationError(null);
     setShowCreateModal(false);
   };
 
@@ -451,6 +507,9 @@ export default function Sidebar({
                           <img
                             src={user.avatar}
                             alt={user.username}
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).src = `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.username}`;
+                            }}
                             className="w-6 h-6 rounded-full object-cover border border-slate-200 dark:border-slate-700 hover:scale-105 transition-transform"
                             referrerPolicy="no-referrer"
                           />
@@ -525,6 +584,9 @@ export default function Sidebar({
                             <img
                               src={user.avatar}
                               alt={user.username}
+                              onError={(e) => {
+                                (e.target as HTMLImageElement).src = `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.username}`;
+                              }}
                               className="w-6 h-6 rounded-full object-cover border border-slate-200 dark:border-slate-700 group-hover/avatar:scale-110 transition-transform"
                               referrerPolicy="no-referrer"
                             />
@@ -618,6 +680,17 @@ export default function Sidebar({
               Establish a secure public or restricted workspace channel for compliance and technical discussions.
             </p>
 
+            {/* SINGLE ISSUE VALIDATION ERROR BANNER */}
+            {creationError && (
+              <div className="mt-3 p-3 bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800/80 rounded-xl flex items-start gap-2 text-left text-xs text-rose-700 dark:text-rose-300 animate-in fade-in duration-150">
+                <span className="text-base font-bold leading-none">⚠️</span>
+                <div className="flex-1">
+                  <p className="font-bold">Validation Issue</p>
+                  <p className="mt-0.5 text-[11px] leading-tight">{creationError}</p>
+                </div>
+              </div>
+            )}
+
             <form onSubmit={handleSubmitCommunity} className="mt-4 space-y-4 text-left">
               <div>
                 <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1.5 font-mono">
@@ -628,7 +701,10 @@ export default function Sidebar({
                   required
                   placeholder="e.g. upi-error-codes"
                   value={newCommName}
-                  onChange={(e) => setNewCommName(e.target.value.replace(/\s+/g, "-").toLowerCase())}
+                  onChange={(e) => {
+                    setCreationError(null);
+                    setNewCommName(e.target.value.replace(/\s+/g, "-").toLowerCase());
+                  }}
                   className="w-full bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 px-3 py-2 rounded-xl text-sm border border-slate-200 dark:border-slate-800 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all font-mono"
                 />
               </div>
@@ -643,6 +719,35 @@ export default function Sidebar({
                   onChange={(e) => setNewCommDesc(e.target.value)}
                   className="w-full bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 px-3 py-2 rounded-xl text-sm border border-slate-200 dark:border-slate-800 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all h-20 resize-none"
                 />
+              </div>
+
+              {/* Specification Attachments */}
+              <div>
+                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1 font-mono">
+                  Channel Specification / Attachment
+                </label>
+                <input
+                  type="file"
+                  multiple
+                  onChange={handleCommunityFileUpload}
+                  className="w-full text-xs text-slate-500 dark:text-slate-400 file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-blue-50 file:text-blue-700 dark:file:bg-slate-800 dark:file:text-blue-400 hover:file:bg-blue-100 cursor-pointer"
+                />
+                {attachedFiles.length > 0 && (
+                  <div className="mt-2 space-y-1">
+                    {attachedFiles.map(f => (
+                      <div key={f.id} className="flex items-center justify-between bg-slate-100 dark:bg-slate-800/60 px-2.5 py-1 rounded-lg text-xs font-mono">
+                        <span className="truncate text-slate-800 dark:text-slate-200">📎 {f.name} ({f.size})</span>
+                        <button
+                          type="button"
+                          onClick={() => setAttachedFiles(prev => prev.filter(item => item.id !== f.id))}
+                          className="text-rose-500 font-bold ml-2 cursor-pointer"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <div className="flex items-center justify-between bg-slate-50 dark:bg-slate-950/40 p-3 rounded-xl border border-slate-150 dark:border-slate-850">

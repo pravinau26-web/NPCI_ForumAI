@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Bell, Search, Shield, User as UserIcon, Check, Circle, Sun, Moon, LogOut, Menu } from "lucide-react";
-import { User, Notification } from "../types";
+import { User, Notification, Community, PolicyDocument } from "../types";
 import NPCILogo from "./NPCILogo";
 
 interface HeaderProps {
@@ -20,6 +20,11 @@ interface HeaderProps {
   onSelectChat?: (chatId: string) => void;
   onSelectCommunity?: (communityId: string) => void;
   threads?: any[];
+  communities?: Community[];
+  policies?: PolicyDocument[];
+  users?: User[];
+  onOpenPdfViewer?: (fileName: string, title: string) => void;
+  onSelectUserChat?: (user: User) => void;
 }
 
 export default function Header({
@@ -39,6 +44,11 @@ export default function Header({
   onSelectChat,
   onSelectCommunity,
   threads,
+  communities,
+  policies,
+  users,
+  onOpenPdfViewer,
+  onSelectUserChat,
 }: HeaderProps) {
   const [showStatusMenu, setShowStatusMenu] = useState(false);
   const [showNotifMenu, setShowNotifMenu] = useState(false);
@@ -120,11 +130,120 @@ export default function Header({
           <Search className="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
           <input
             type="text"
-            placeholder="Search discussions, tags, or announcements..."
+            placeholder="Search communities, threads, compliance docs, or coworkers..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 pl-10 pr-4 py-2 rounded-xl text-sm border border-slate-200 dark:border-slate-700 focus:outline-none focus:bg-white dark:focus:bg-slate-950 focus:border-blue-600 dark:focus:border-blue-500 focus:ring-1 focus:ring-blue-600 dark:focus:ring-blue-500 transition-all duration-150"
           />
+
+          {/* Search Dropdown Overlay */}
+          {searchQuery.trim().length > 0 && (
+            <div className="absolute top-full left-0 right-0 mt-2 bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 max-h-96 overflow-y-auto z-50 p-3 space-y-3 animate-in fade-in duration-150 text-left">
+              
+              {/* Communities */}
+              {communities && communities.filter(c => c.name.toLowerCase().includes(searchQuery.toLowerCase()) || c.description.toLowerCase().includes(searchQuery.toLowerCase())).length > 0 && (
+                <div>
+                  <p className="text-[10px] font-bold font-mono uppercase text-blue-600 dark:text-blue-400 px-2 mb-1">Communities</p>
+                  {communities.filter(c => c.name.toLowerCase().includes(searchQuery.toLowerCase()) || c.description.toLowerCase().includes(searchQuery.toLowerCase())).slice(0, 3).map(comm => (
+                    <div
+                      key={comm.id}
+                      onClick={() => {
+                        if (onSelectCommunity) onSelectCommunity(comm.id);
+                        onViewChange("forum");
+                        setSearchQuery("");
+                      }}
+                      className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer transition flex items-center justify-between text-xs"
+                    >
+                      <span className="font-bold text-slate-800 dark:text-slate-200">#{comm.name}</span>
+                      <span className="text-[10px] text-slate-400 font-mono">Community</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Discussion Threads */}
+              {threads && threads.filter(t => t.title.toLowerCase().includes(searchQuery.toLowerCase()) || t.content.toLowerCase().includes(searchQuery.toLowerCase())).length > 0 && (
+                <div>
+                  <p className="text-[10px] font-bold font-mono uppercase text-purple-600 dark:text-purple-400 px-2 mb-1">Discussions</p>
+                  {threads.filter(t => t.title.toLowerCase().includes(searchQuery.toLowerCase()) || t.content.toLowerCase().includes(searchQuery.toLowerCase())).slice(0, 4).map(t => (
+                    <div
+                      key={t.id}
+                      onClick={() => {
+                        if (onSelectCommunity) onSelectCommunity(t.communityId);
+                        onSelectThread(t.id);
+                        onViewChange("forum");
+                        setSearchQuery("");
+                      }}
+                      className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer transition text-xs"
+                    >
+                      <p className="font-bold text-slate-800 dark:text-slate-200 truncate">{t.title}</p>
+                      <p className="text-[10px] text-slate-400 truncate mt-0.5">{t.content}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Compliance Policies */}
+              {policies && policies.filter(p => p.title.toLowerCase().includes(searchQuery.toLowerCase()) || p.fileName.toLowerCase().includes(searchQuery.toLowerCase())).length > 0 && (
+                <div>
+                  <p className="text-[10px] font-bold font-mono uppercase text-emerald-600 dark:text-emerald-400 px-2 mb-1">Compliance & Specs</p>
+                  {policies.filter(p => p.title.toLowerCase().includes(searchQuery.toLowerCase()) || p.fileName.toLowerCase().includes(searchQuery.toLowerCase())).slice(0, 3).map(p => (
+                    <div
+                      key={p.id}
+                      onClick={() => {
+                        if (onOpenPdfViewer) onOpenPdfViewer(p.fileName, p.title);
+                        onViewChange("policy");
+                        setSearchQuery("");
+                      }}
+                      className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer transition text-xs flex items-center justify-between"
+                    >
+                      <span className="font-bold text-slate-800 dark:text-slate-200 truncate">{p.title}</span>
+                      <span className="text-[9px] bg-rose-500/10 text-rose-500 px-1.5 py-0.5 rounded font-mono uppercase">PDF Spec</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Coworkers */}
+              {users && users.filter(u => u.username.toLowerCase().includes(searchQuery.toLowerCase()) || u.email.toLowerCase().includes(searchQuery.toLowerCase())).length > 0 && (
+                <div>
+                  <p className="text-[10px] font-bold font-mono uppercase text-amber-600 dark:text-amber-400 px-2 mb-1">Coworkers</p>
+                  {users.filter(u => u.username.toLowerCase().includes(searchQuery.toLowerCase()) || u.email.toLowerCase().includes(searchQuery.toLowerCase())).slice(0, 3).map(u => (
+                    <div
+                      key={u.id}
+                      onClick={() => {
+                        if (onSelectUserChat) onSelectUserChat(u);
+                        onViewChange("chats");
+                        setSearchQuery("");
+                      }}
+                      className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer transition text-xs flex items-center gap-2"
+                    >
+                      <img
+                        src={u.avatar}
+                        alt={u.username}
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).src = `https://api.dicebear.com/7.x/avataaars/svg?seed=${u.username}`;
+                        }}
+                        className="w-5 h-5 rounded-full object-cover"
+                      />
+                      <span className="font-bold text-slate-800 dark:text-slate-200">@{u.username}</span>
+                      <span className="text-[10px] text-slate-400 ml-auto font-mono">{u.department || u.role}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* No match */}
+              {(!communities || communities.filter(c => c.name.toLowerCase().includes(searchQuery.toLowerCase())).length === 0) &&
+               (!threads || threads.filter(t => t.title.toLowerCase().includes(searchQuery.toLowerCase())).length === 0) &&
+               (!policies || policies.filter(p => p.title.toLowerCase().includes(searchQuery.toLowerCase())).length === 0) &&
+               (!users || users.filter(u => u.username.toLowerCase().includes(searchQuery.toLowerCase())).length === 0) && (
+                <div className="p-4 text-center text-xs text-slate-400 italic">
+                  No matching workspace results for "{searchQuery}"
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Right Controls */}

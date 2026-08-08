@@ -22,6 +22,7 @@ interface ThreadViewProps {
   onDeleteThread: (id: string) => void;
   policies?: PolicyDocument[];
   onViewProfile?: (user: User) => void;
+  onPreviewAttachment?: (attachment: Attachment) => void;
 }
 
 export default function ThreadView({
@@ -40,6 +41,7 @@ export default function ThreadView({
   onDeleteThread,
   policies = [],
   onViewProfile,
+  onPreviewAttachment,
 }: ThreadViewProps) {
   const [showNewThreadForm, setShowNewThreadForm] = useState(false);
   const [newTitle, setNewTitle] = useState("");
@@ -309,16 +311,17 @@ export default function ThreadView({
                     {activeThread.attachments.map((file, i) => (
                       <div
                         key={i}
-                        className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-250/60 hover:bg-slate-100 transition"
+                        onClick={() => onPreviewAttachment && onPreviewAttachment(file)}
+                        className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-250/60 hover:bg-blue-50/50 hover:border-blue-400/50 transition cursor-pointer group"
                       >
                         <div className="flex items-center gap-2 truncate">
                           <Paperclip className="w-4 h-4 text-blue-500 flex-shrink-0" />
                           <div className="truncate text-left">
-                            <p className="text-xs font-semibold text-slate-700 truncate">{file.name}</p>
-                            <p className="text-[10px] text-slate-400 font-mono capitalize">{file.type.split("/")[1]} • {file.size}</p>
+                            <p className="text-xs font-semibold text-slate-700 dark:text-slate-200 truncate group-hover:text-blue-600 transition-colors">{file.name}</p>
+                            <p className="text-[10px] text-slate-400 font-mono capitalize">{file.type.split("/")[1] || "File"} • {file.size} • Click to Preview</p>
                           </div>
                         </div>
-                        <span className="text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-bold">Secure</span>
+                        <span className="text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-bold shrink-0">Preview</span>
                       </div>
                     ))}
                   </div>

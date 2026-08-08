@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { User, Community, Thread, Comment, Chat, ChatMessage, Notification, PolicyDocument, AuditLog, UserRole } from "./types";
+import { User, Community, Thread, Comment, Chat, ChatMessage, Notification, PolicyDocument, AuditLog, UserRole, Attachment } from "./types";
 import Login from "./components/Login";
 import Header from "./components/Header";
 import Sidebar from "./components/Sidebar";
@@ -12,6 +12,7 @@ import LiveNotificationToast from "./components/LiveNotificationToast";
 import PDFViewerModal from "./components/PDFViewerModal";
 import UserProfileModal from "./components/UserProfileModal";
 import ProfileSettingsModal from "./components/ProfileSettingsModal";
+import AttachmentPreviewModal from "./components/AttachmentPreviewModal";
 
 export default function App() {
   // Theme Manager (Light & Dark mode support)
@@ -75,6 +76,8 @@ export default function App() {
   });
   const [selectedProfileUser, setSelectedProfileUser] = useState<User | null>(null);
   const [pdfViewerPolicy, setPdfViewerPolicy] = useState<PolicyDocument | null>(null);
+  const [showProfileSettings, setShowProfileSettings] = useState(false);
+  const [previewAttachment, setPreviewAttachment] = useState<Attachment | null>(null);
 
   const handleToggleFavorite = (userId: string) => {
     setFavorites(prev => {
@@ -85,8 +88,6 @@ export default function App() {
       return updated;
     });
   };
-
-  const [showProfileSettings, setShowProfileSettings] = useState(false);
 
   const handleUpdateProfile = async (updatedData: {
     username?: string;
@@ -797,6 +798,24 @@ export default function App() {
           setActiveCommunityId(communityId);
         }}
         threads={threads}
+        communities={communities}
+        policies={policies}
+        users={users}
+        onOpenPdfViewer={(fileName, title) => {
+          const policyObj = policies.find(p => p.fileName === fileName) || {
+            id: `policy-${Date.now()}`,
+            title: title || fileName,
+            category: "NPCI Specifications",
+            fileName: fileName,
+            version: "v2.4",
+            uploadedBy: "npci_admin",
+            uploadedAt: new Date().toISOString(),
+            fileSize: "1.8 MB",
+            summary: "NPCI Technical Specifications and Security Directives Document."
+          };
+          setPdfViewerPolicy(policyObj);
+        }}
+        onSelectUserChat={handleSelectUserChat}
       />
 
       {/* Main Body */}
@@ -879,6 +898,7 @@ export default function App() {
               onDeleteThread={handleDeleteThread}
               policies={policies}
               onViewProfile={setSelectedProfileUser}
+              onPreviewAttachment={setPreviewAttachment}
             />
           )}
 
@@ -896,6 +916,7 @@ export default function App() {
               onAskProductAi={handleAskProductAi}
               isAiResponding={isAiResponding}
               onViewProfile={setSelectedProfileUser}
+              onPreviewAttachment={setPreviewAttachment}
             />
           )}
 
@@ -983,6 +1004,14 @@ export default function App() {
           currentUser={currentUser}
           onClose={() => setShowProfileSettings(false)}
           onUpdateProfile={handleUpdateProfile}
+        />
+      )}
+
+      {/* GLOBAL ATTACHMENT PREVIEW MODAL */}
+      {previewAttachment && (
+        <AttachmentPreviewModal
+          attachment={previewAttachment}
+          onClose={() => setPreviewAttachment(null)}
         />
       )}
     </div>

@@ -19,6 +19,7 @@ interface DMChatProps {
   onAskProductAi: (question: string) => Promise<string>;
   isAiResponding?: boolean;
   onViewProfile?: (user: User) => void;
+  onPreviewAttachment?: (attachment: Attachment) => void;
 }
 
 export default function DMChat({
@@ -34,6 +35,7 @@ export default function DMChat({
   onViewProfile,
   onDeleteGroup,
   onExitGroup,
+  onPreviewAttachment,
 }: DMChatProps) {
   const [msgInput, setMsgInput] = useState("");
   const [productQuestion, setProductQuestion] = useState("");
@@ -399,25 +401,24 @@ export default function DMChat({
                               {msg.attachments.map((file, idx) => {
                                 const isImage = file.type.startsWith("image/");
                                 return (
-                                  <div key={idx} className="rounded-lg overflow-hidden border border-slate-200/20">
+                                  <div 
+                                    key={idx} 
+                                    onClick={() => onPreviewAttachment && onPreviewAttachment(file)}
+                                    className="rounded-xl overflow-hidden border border-slate-200/20 cursor-pointer hover:border-blue-500/50 transition group"
+                                  >
                                     {isImage ? (
-                                      <div className="bg-slate-100 dark:bg-slate-800 flex justify-center items-center">
+                                      <div className="bg-slate-100 dark:bg-slate-800 flex justify-center items-center relative">
                                         <img
                                           src={file.url}
                                           alt={file.name}
-                                          className="object-contain max-h-48 w-full cursor-pointer hover:opacity-90 transition"
-                                          onClick={() => {
-                                            const w = window.open();
-                                            if (w) {
-                                              w.document.write(`<img src="${file.url}" style="max-width:100%; max-height:100vh; display:block; margin:auto;" />`);
-                                            }
-                                          }}
+                                          className="object-contain max-h-48 w-full group-hover:scale-[1.02] transition-transform duration-150"
                                         />
+                                        <span className="absolute bottom-2 right-2 bg-slate-900/80 text-white text-[10px] px-2 py-0.5 rounded font-mono font-bold backdrop-blur-xs">
+                                          Click to Preview
+                                        </span>
                                       </div>
                                     ) : (
-                                      <a
-                                        href={file.url}
-                                        download={file.name}
+                                      <div
                                         className={`flex items-center gap-2 p-2.5 text-xs transition truncate ${
                                           isMe 
                                             ? "bg-white/10 text-white hover:bg-white/20" 
@@ -426,10 +427,10 @@ export default function DMChat({
                                       >
                                         <Paperclip className="w-4 h-4 text-blue-500 flex-shrink-0" />
                                         <div className="truncate text-left flex-1 min-w-0">
-                                          <p className="font-semibold truncate leading-tight">{file.name}</p>
-                                          <p className="text-[10px] opacity-75 mt-0.5 font-mono">{file.size}</p>
+                                          <p className="font-semibold truncate leading-tight group-hover:text-blue-400 transition-colors">{file.name}</p>
+                                          <p className="text-[10px] opacity-75 mt-0.5 font-mono">{file.size} • Click to Preview</p>
                                         </div>
-                                      </a>
+                                      </div>
                                     )}
                                   </div>
                                 );
