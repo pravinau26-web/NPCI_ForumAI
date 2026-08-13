@@ -544,6 +544,31 @@ export default function App() {
     }
   };
 
+  const handleUpdateCommunityMembers = async (
+    communityId: string,
+    memberIds: string[],
+    allowedUserIds: string[],
+    allowedDepartments: string[]
+  ) => {
+    if (!currentUser) return;
+    try {
+      const res = await fetch(`/api/communities/${communityId}/members`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", "x-user-id": currentUser.id },
+        body: JSON.stringify({ memberIds, allowedUserIds, allowedDepartments }),
+      });
+      if (res.ok) {
+        const updatedComm = await res.json();
+        setCommunities(prev => prev.map(c => c.id === communityId ? updatedComm : c));
+      } else {
+        const err = await res.json();
+        alert(err.error || "Failed to update community access permissions");
+      }
+    } catch (err) {
+      console.error("Error updating community members:", err);
+    }
+  };
+
   const handleAddThread = async (title: string, content: string, tags?: string[], attachments?: any[]) => {
     if (!currentUser || !activeCommunityId) return;
     const res = await fetch(`/api/communities/${activeCommunityId}/threads`, {
@@ -953,6 +978,7 @@ export default function App() {
               onPinThread={handlePinThread}
               onDeleteThread={handleDeleteThread}
               onDeleteCommunity={handleDeleteCommunity}
+              onUpdateCommunityMembers={handleUpdateCommunityMembers}
               policies={policies}
               onViewProfile={setSelectedProfileUser}
               onPreviewAttachment={setPreviewAttachment}

@@ -1,10 +1,11 @@
 import React, { useState, useRef } from "react";
 import { 
   ArrowLeft, Pin, ThumbsUp, MessageSquare, Tag, Paperclip, Send, 
-  Sparkles, Check, Trash2, Bot, AlertTriangle, X
+  Sparkles, Check, Trash2, Bot, AlertTriangle, X, Users, Shield
 } from "lucide-react";
 import { Thread, Comment, User, Community, Attachment, PolicyDocument } from "../types";
 import MentionText from "./MentionText";
+import CommunityMembersModal from "./CommunityMembersModal";
 
 interface ThreadViewProps {
   community: Community;
@@ -21,6 +22,7 @@ interface ThreadViewProps {
   onPinThread: (id: string, isPinned: boolean) => void;
   onDeleteThread: (id: string) => void;
   onDeleteCommunity?: (communityId: string) => void;
+  onUpdateCommunityMembers?: (communityId: string, memberIds: string[], allowedUserIds: string[], allowedDepartments: string[]) => Promise<void>;
   policies?: PolicyDocument[];
   onViewProfile?: (user: User) => void;
   onPreviewAttachment?: (attachment: Attachment) => void;
@@ -41,11 +43,13 @@ export default function ThreadView({
   onPinThread,
   onDeleteThread,
   onDeleteCommunity,
+  onUpdateCommunityMembers,
   policies = [],
   onViewProfile,
   onPreviewAttachment,
 }: ThreadViewProps) {
   const [showNewThreadForm, setShowNewThreadForm] = useState(false);
+  const [showMembersModal, setShowMembersModal] = useState(false);
   const [newTitle, setNewTitle] = useState("");
   const [newContent, setNewContent] = useState("");
   const [attachments, setAttachments] = useState<Attachment[]>([]);
@@ -658,6 +662,16 @@ export default function ThreadView({
             </div>
 
             <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setShowMembersModal(true)}
+                className="bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/60 dark:hover:bg-blue-900/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 text-xs font-bold px-3 py-2 rounded-xl transition flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                title="View Community Access & Authorized Members"
+              >
+                <Users className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                <span>Members & Security ({community.isPrivate ? (community.memberIds?.length || 1) : users.length})</span>
+              </button>
+
               {onDeleteCommunity && !["comm-1", "comm-2", "comm-3", "comm-4"].includes(community.id) && (currentUser.role === "platform_admin" || community.createdBy === currentUser.id) && (
                 <button
                   type="button"
@@ -1240,6 +1254,21 @@ export default function ThreadView({
             </div>
           </div>
         </div>
+      )}
+      {/* COMMUNITY MEMBERS & SECURITY MODAL */}
+      {showMembersModal && (
+        <CommunityMembersModal
+          community={community}
+          users={users}
+          currentUser={currentUser}
+          onClose={() => setShowMembersModal(false)}
+          onUpdateCommunityMembers={async (cid, memberIds, allowedUserIds, allowedDepartments) => {
+            if (onUpdateCommunityMembers) {
+              await onUpdateCommunityMembers(cid, memberIds, allowedUserIds, allowedDepartments);
+            }
+          }}
+          onViewProfile={onViewProfile}
+        />
       )}
     </div>
   );

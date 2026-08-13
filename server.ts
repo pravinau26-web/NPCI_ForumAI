@@ -851,7 +851,80 @@ const addAuditLog = (action: string, actorId: string, details: string) => {
   // Broadcast log to platform admins
   const admins = users.filter(u => u.role === "platform_admin" || u.role === "policy_admin").map(u => u.id);
   broadcastEvent(admins, "audit_log:added", log);
+
+  // Auto-persist all state changes to volume
+  saveDataToDisk();
 };
+
+// ==========================================
+// PERSISTENT DATA STORAGE ENGINE (DISK VOLUME)
+// ==========================================
+const STORAGE_DIR = process.env.DATA_VOLUME_PATH 
+  || (fs.existsSync("/data") ? "/data" : path.join(process.cwd(), "storage"));
+
+const DATA_FILE_PATH = path.join(STORAGE_DIR, "forum_data.json");
+
+function ensureStorageDirExists() {
+  try {
+    if (!fs.existsSync(STORAGE_DIR)) {
+      fs.mkdirSync(STORAGE_DIR, { recursive: true });
+    }
+  } catch (err) {
+    console.warn("[Data Storage Warning]: Could not create storage dir:", err);
+  }
+}
+
+function saveDataToDisk() {
+  try {
+    ensureStorageDirExists();
+    const payload = {
+      users,
+      communities,
+      threads,
+      comments,
+      chats,
+      chatMessages,
+      notifications,
+      policyDocuments,
+      auditLogs,
+      deptRoleList
+    };
+    fs.writeFileSync(DATA_FILE_PATH, JSON.stringify(payload, null, 2), "utf-8");
+  } catch (err) {
+    console.error("[Persistent Volume Save Error]:", err);
+  }
+}
+
+function loadDataFromDisk() {
+  try {
+    ensureStorageDirExists();
+    if (fs.existsSync(DATA_FILE_PATH)) {
+      const raw = fs.readFileSync(DATA_FILE_PATH, "utf-8");
+      if (raw.trim()) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed.users) && parsed.users.length > 0) users = parsed.users;
+        if (Array.isArray(parsed.communities) && parsed.communities.length > 0) communities = parsed.communities;
+        if (Array.isArray(parsed.threads)) threads = parsed.threads;
+        if (Array.isArray(parsed.comments)) comments = parsed.comments;
+        if (Array.isArray(parsed.chats)) chats = parsed.chats;
+        if (Array.isArray(parsed.chatMessages)) chatMessages = parsed.chatMessages;
+        if (Array.isArray(parsed.notifications)) notifications = parsed.notifications;
+        if (Array.isArray(parsed.policyDocuments) && parsed.policyDocuments.length > 0) policyDocuments = parsed.policyDocuments;
+        if (Array.isArray(parsed.auditLogs)) auditLogs = parsed.auditLogs;
+        if (Array.isArray(parsed.deptRoleList) && parsed.deptRoleList.length > 0) deptRoleList = parsed.deptRoleList;
+        console.log(`[Persistent Volume]: Successfully loaded data from ${DATA_FILE_PATH} (${users.length} users, ${communities.length} communities, ${threads.length} threads)`);
+      }
+    } else {
+      console.log(`[Persistent Volume]: No existing data file found at ${DATA_FILE_PATH}. Initializing default dataset.`);
+      saveDataToDisk();
+    }
+  } catch (err) {
+    console.error("[Persistent Volume Load Error]:", err);
+  }
+}
+
+// Load persisted data state on server startup
+loadDataFromDisk();
 
 // ==========================================
 // GEMINI AI INTEGRATION ENGINE
@@ -1959,6 +2032,34 @@ app.delete("/api/communities/:id", (req, res) => {
   addAuditLog("Community Deleted", userId || "system", `Deleted community #${deletedComm.name}`);
   broadcastEvent("all", "community:deleted", { communityId: id });
   res.json({ success: true, communityId: id });
+});
+
+app.put("/api/communities/:id/members", (req, res) => {
+  const { id } = req.params;
+  const { memberIds, allowedUserIds, allowedDepartments } = req.body;
+  const actorId = (req.headers["x-user-id"] as string) || (req.body.actorId as string) || "";
+
+  const comm = communities.find(c => c.id === id);
+  if (!comm) {
+    return res.status(404).json({ error: "Community not found" });
+  }
+
+  if (Array.isArray(memberIds)) {
+    const set = new Set<string>(memberIds);
+    set.add(comm.createdBy);
+    set.add("npci_assistant");
+    comm.memberIds = Array.from(set);
+  }
+  if (Array.isArray(allowedUserIds)) {
+    comm.allowedUserIds = allowedUserIds;
+  }
+  if (Array.isArray(allowedDepartments)) {
+    comm.allowedDepartments = allowedDepartments;
+  }
+
+  addAuditLog("Community Access Updated", actorId || comm.createdBy, `Updated access permissions & member list for community #${comm.name}`);
+  broadcastEvent("all", "community:updated", comm);
+  res.json(comm);
 });
 
 // Threads & Discussions
