@@ -5,8 +5,11 @@ on:
   push:
     branches:
       - main
-      - master
   workflow_dispatch:
+
+concurrency:
+  group: npci-forum-deployment
+  cancel-in-progress: true
 
 env:
   ACTIONS_RUNNER_DEBUG: 'true'

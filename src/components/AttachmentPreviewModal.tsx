@@ -31,10 +31,29 @@ export default function AttachmentPreviewModal({ attachment, onClose }: Attachme
     attachment.type?.includes("json") || 
     /\.(txt|json|md|yaml|yml|xml|log|ts|js|py|sql|html|css|sh)$/i.test(nameLower);
 
+  // Decode text/code if data URL is provided
+  let decodedTextContent: string | null = null;
+  if (isCodeOrText && attachment.url && attachment.url.startsWith("data:")) {
+    try {
+      const base64Part = attachment.url.split(",")[1];
+      if (base64Part) {
+        decodedTextContent = decodeURIComponent(escape(atob(base64Part)));
+      }
+    } catch {
+      try {
+        decodedTextContent = atob(attachment.url.split(",")[1]);
+      } catch {
+        decodedTextContent = null;
+      }
+    }
+  }
+
   // Normalize PDF URL if data URL
   let safePdfUrl = attachment.url;
-  if (isPdf && safePdfUrl && safePdfUrl.startsWith("data:") && !safePdfUrl.startsWith("data:application/pdf")) {
-    safePdfUrl = safePdfUrl.replace(/^data:[^;]+;base64,/, "data:application/pdf;base64,");
+  if (isPdf && safePdfUrl) {
+    if (safePdfUrl.startsWith("data:") && !safePdfUrl.startsWith("data:application/pdf")) {
+      safePdfUrl = safePdfUrl.replace(/^data:[^;]+;base64,/, "data:application/pdf;base64,");
+    }
   }
 
   const handleZoomIn = () => setZoom(prev => Math.min(prev + 20, 200));
@@ -75,7 +94,11 @@ export default function AttachmentPreviewModal({ attachment, onClose }: Attachme
   const handleCopyText = () => {
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
-    navigator.clipboard.writeText(`NPCI Document: ${attachment.name}\nSize: ${attachment.size}\nType: ${attachment.type}`);
+    if (decodedTextContent) {
+      navigator.clipboard.writeText(decodedTextContent);
+    } else {
+      navigator.clipboard.writeText(`NPCI Document: ${attachment.name}\nSize: ${attachment.size}\nType: ${attachment.type}`);
+    }
   };
 
   return (
@@ -446,7 +469,7 @@ export default function AttachmentPreviewModal({ attachment, onClose }: Attachme
                 </button>
               </div>
               <div className="flex-1 p-5 overflow-auto text-xs leading-relaxed text-cyan-300/90 bg-slate-950/80 font-mono whitespace-pre-wrap">
-                {`/* NPCI Specification Payload: ${attachment.name} */\n{\n  "document": "${attachment.name}",\n  "file_size": "${attachment.size}",\n  "content_type": "${attachment.type}",\n  "status": "APPROVED_NPCI_SPECIFICATION",\n  "security_clearance": "RESTRICTED",\n  "timestamp": "${new Date().toISOString()}"\n}`}
+                {decodedTextContent ? decodedTextContent : `/* NPCI Specification Payload: ${attachment.name} */\n{\n  "document": "${attachment.name}",\n  "file_size": "${attachment.size}",\n  "content_type": "${attachment.type}",\n  "status": "APPROVED_NPCI_SPECIFICATION",\n  "security_clearance": "RESTRICTED",\n  "timestamp": "${new Date().toISOString()}"\n}`}
               </div>
             </div>
           ) : (
