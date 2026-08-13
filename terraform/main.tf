@@ -1,0 +1,407 @@
+terraform {
+  required_version = ">= 1.0.0"
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    }
+  }
+  backend "s3" {
+    bucket                      = "npci-forum-tfstate-ap-south-2"
+    key                         = "state/terraform.tfstate"
+    region                      = "ap-south-2"
+    skip_region_validation      = true
+    skip_credentials_validation = true
+  }
+}
+
+provider "aws" {
+  region = var.aws_region
+}
+
+# Dynamic Availability Zone Lookup for Region (e.g. ap-south-2)
+data "aws_availability_zones" "available" {
+  state = "available"
+}
+
+# 1. VPC Configuration
+resource "aws_vpc" "main" {
+  cidr_block           = var.vpc_cidr
+  enable_dns_hostnames = true
+  enable_dns_support   = true
+
+  tags = {
+    Name        = "npci-forum-vpc"
+    Environment = "production"
+  }
+}
+
+# 2. Internet Gateway
+resource "aws_internet_gateway" "gw" {
+  vpc_id = aws_vpc.main.id
+
+  tags = {
+    Name = "npci-forum-igw"
+  }
+}
+
+# 3. Public Subnet
+resource "aws_subnet" "public" {
+  vpc_id                  = aws_vpc.main.id
+  cidr_block              = var.public_subnet_cidr
+  map_public_ip_on_launch = true
+  availability_zone       = data.aws_availability_zones.available.names[0]
+
+  tags = {
+    Name = "npci-forum-public-subnet"
+  }
+}
+
+# 4. Route Table & Association
+resource "aws_route_table" "public_rt" {
+  vpc_id = aws_vpc.main.id
+
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.gw.id
+  }
+
+  tags = {
+    Name = "npci-forum-public-rt"
+  }
+}
+
+resource "aws_route_table_association" "public_assoc" {
+  subnet_id      = aws_subnet.public.id
+  route_table_id = aws_route_table.public_rt.id
+}
+
+# 5. Security Group for EC2 / Kubernetes Node
+resource "aws_security_group" "ec2_sg" {
+  name        = "npci-forum-ec2-sg"
+  description = "Security group for NPCI Forum EC2 Instance and Helm apps"
+  vpc_id      = aws_vpc.main.id
+
+  ingress {
+    description = "SSH Access"
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    description = "HTTP Traffic"
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    description = "Application App Port"
+    from_port   = 3000
+    to_port     = 3000
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    description = "Grafana UI"
+    from_port   = 3001
+    to_port     = 3001
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    description = "Prometheus Metrics"
+    from_port   = 9090
+    to_port     = 9090
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    description = "Backend Port"
+    from_port   = 8000
+    to_port     = 8000
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    description = "MCP Server Port"
+    from_port   = 8001
+    to_port     = 8001
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    description = "PostgreSQL DB Port"
+    from_port   = 5432
+    to_port     = 5432
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    description = "Vector DB Engine Port"
+    from_port   = 6333
+    to_port     = 6333
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    description = "HTTPS Traffic"
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "npci-forum-sg"
+  }
+}
+
+# 6. S3 Bucket for Frontend Hosting and Document Storage
+resource "random_string" "bucket_suffix" {
+  length  = 8
+  special = false
+  upper   = false
+}
+
+resource "aws_s3_bucket" "frontend" {
+  bucket        = "${var.s3_bucket_name}-${random_string.bucket_suffix.result}"
+  force_destroy = true
+
+  tags = {
+    Name = "npci-forum-s3-frontend"
+  }
+}
+
+resource "aws_s3_bucket_public_access_block" "public_access" {
+  bucket = aws_s3_bucket.frontend.id
+
+  block_public_acls       = false
+  block_public_policy     = false
+  ignore_public_acls      = false
+  restrict_public_buckets = false
+}
+
+resource "aws_s3_bucket_policy" "frontend_policy" {
+  depends_on = [aws_s3_bucket_public_access_block.public_access]
+  bucket     = aws_s3_bucket.frontend.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid       = "PublicReadGetObject"
+        Effect    = "Allow"
+        Principal = "*"
+        Action    = "s3:GetObject"
+        Resource  = "${aws_s3_bucket.frontend.arn}/*"
+      }
+    ]
+  })
+}
+
+resource "aws_s3_bucket_website_configuration" "frontend_website" {
+  bucket = aws_s3_bucket.frontend.id
+
+  index_document {
+    suffix = "index.html"
+  }
+
+  error_document {
+    key = "index.html"
+  }
+}
+
+# 7. EBS Volume Creation for K8s PVC / Persistent Storage
+resource "aws_ebs_volume" "data_volume_v2" {
+  availability_zone = data.aws_availability_zones.available.names[0]
+  size              = 10
+  type              = "gp3"
+
+  tags = {
+    Name = "npci-forum-data-pvc-volume"
+  }
+}
+
+# Dynamic AMI Lookup for Ubuntu 22.04 LTS
+data "aws_ami" "ubuntu" {
+  most_recent = true
+  owners      = ["099720109477"] # Canonical
+
+  filter {
+    name   = "name"
+    values = ["ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*"]
+  }
+
+  filter {
+    name   = "virtualization-type"
+    values = ["hvm"]
+  }
+}
+
+# Generate dynamic SSH key pair for EC2 (No manual SSH key needed in GitHub Secrets)
+resource "tls_private_key" "ec2_key" {
+  algorithm = "RSA"
+  rsa_bits  = 4096
+}
+
+resource "aws_key_pair" "generated_key" {
+  key_name   = "npci-forum-key-${substr(tls_private_key.ec2_key.id, 0, 8)}"
+  public_key = tls_private_key.ec2_key.public_key_openssh
+}
+
+# 8. EC2 Instance 1: Primary Application Node (Web App, AI Backend, MCP Server, PostgreSQL)
+resource "aws_instance" "app_server" {
+  ami                         = data.aws_ami.ubuntu.id
+  instance_type               = var.instance_type
+  subnet_id                   = aws_subnet.public.id
+  associate_public_ip_address = true
+  vpc_security_group_ids      = [aws_security_group.ec2_sg.id]
+  key_name                    = aws_key_pair.generated_key.key_name
+
+  root_block_device {
+    volume_size           = 20
+    volume_type           = "gp3"
+    delete_on_termination = true
+  }
+
+  user_data = <<-EOF
+              #!/bin/bash
+              DEBIAN_FRONTEND=noninteractive apt-get update -y
+              DEBIAN_FRONTEND=noninteractive apt-get install -y docker.io curl git xfsProgs ufw
+              ufw disable || true
+              iptables -F || true
+              systemctl start docker
+              systemctl enable docker
+              usermod -aG docker ubuntu
+
+              mkdir -p /home/ubuntu/.ssh
+              echo "${tls_private_key.ec2_key.public_key_openssh}" >> /home/ubuntu/.ssh/authorized_keys
+              chmod 700 /home/ubuntu/.ssh
+              chmod 600 /home/ubuntu/.ssh/authorized_keys
+              chown -R ubuntu:ubuntu /home/ubuntu/.ssh
+
+              # Create 2GB Swap File to prevent 97% RAM memory exhaustion & slowdowns
+              if ! swapon -s | grep -q swapfile; then
+                fallocate -l 2G /swapfile || dd if=/dev/zero of=/swapfile bs=1M count=2048
+                chmod 600 /swapfile
+                mkswap /swapfile
+                swapon /swapfile
+                echo '/swapfile none swap sw 0 0' >> /etc/fstab
+                echo 'vm.swappiness=10' >> /etc/sysctl.conf
+                sysctl -p || true
+              fi
+
+              # Format and Mount AWS EBS Volume for DB Persistence if attached
+              mkdir -p /data/db
+              if ! blkid /dev/sdh && ! blkid /dev/xvdh && ! blkid /dev/nvme1n1; then
+                mkfs -t ext4 /dev/sdh || mkfs -t ext4 /dev/xvdh || mkfs -t ext4 /dev/nvme1n1 || true
+              fi
+              mount /dev/sdh /data/db || mount /dev/xvdh /data/db || mount /dev/nvme1n1 /data/db || true
+              mkdir -p /data/db/postgres /data/db/uploads
+              chmod -R 777 /data/db
+              EOF
+
+  tags = {
+    Name = "npci-forum-app-node"
+  }
+}
+
+# 9. EC2 Instance 2: Dedicated Monitoring & Vector DB Node (Prometheus, Grafana, Vector DB RAG Store)
+resource "aws_instance" "monitoring_vector_server" {
+  ami                         = data.aws_ami.ubuntu.id
+  instance_type               = var.instance_type
+  subnet_id                   = aws_subnet.public.id
+  associate_public_ip_address = true
+  vpc_security_group_ids      = [aws_security_group.ec2_sg.id]
+  key_name                    = aws_key_pair.generated_key.key_name
+
+  root_block_device {
+    volume_size           = 10
+    volume_type           = "gp3"
+    delete_on_termination = true
+  }
+
+  user_data = <<-EOF
+              #!/bin/bash
+              DEBIAN_FRONTEND=noninteractive apt-get update -y
+              DEBIAN_FRONTEND=noninteractive apt-get install -y docker.io curl git ufw
+              ufw disable || true
+              iptables -F || true
+              systemctl start docker
+              systemctl enable docker
+              usermod -aG docker ubuntu
+
+              mkdir -p /home/ubuntu/.ssh
+              echo "${tls_private_key.ec2_key.public_key_openssh}" >> /home/ubuntu/.ssh/authorized_keys
+              chmod 700 /home/ubuntu/.ssh
+              chmod 600 /home/ubuntu/.ssh/authorized_keys
+              chown -R ubuntu:ubuntu /home/ubuntu/.ssh
+
+              # Create 2GB Swap File to prevent 97% RAM memory exhaustion & slowdowns
+              if ! swapon -s | grep -q swapfile; then
+                fallocate -l 2G /swapfile || dd if=/dev/zero of=/swapfile bs=1M count=2048
+                chmod 600 /swapfile
+                mkswap /swapfile
+                swapon /swapfile
+                echo '/swapfile none swap sw 0 0' >> /etc/fstab
+                echo 'vm.swappiness=10' >> /etc/sysctl.conf
+                sysctl -p || true
+              fi
+
+              mkdir -p /data/vector /etc/prometheus /etc/grafana/provisioning/datasources /etc/grafana/provisioning/dashboards
+              chmod -R 777 /data/vector
+              EOF
+
+  tags = {
+    Name = "npci-forum-monitoring-vector-node"
+  }
+}
+
+# 9. EBS Volume Attachment
+resource "aws_volume_attachment" "ebs_att" {
+  device_name = "/dev/sdh"
+  volume_id   = aws_ebs_volume.data_volume_v2.id
+  instance_id = aws_instance.app_server.id
+}
+
+# 10. Static Elastic IP Associations for persistent IP addressing
+data "aws_eip" "app_eip" {
+  count = var.app_eip_allocation_id != "" ? 1 : 0
+  id    = var.app_eip_allocation_id
+}
+
+resource "aws_eip_association" "app_eip_assoc" {
+  count         = var.app_eip_allocation_id != "" ? 1 : 0
+  instance_id   = aws_instance.app_server.id
+  allocation_id = var.app_eip_allocation_id
+}
+
+data "aws_eip" "monitoring_eip" {
+  count = var.monitoring_eip_allocation_id != "" ? 1 : 0
+  id    = var.monitoring_eip_allocation_id
+}
+
+resource "aws_eip_association" "monitoring_eip_assoc" {
+  count         = var.monitoring_eip_allocation_id != "" ? 1 : 0
+  instance_id   = aws_instance.monitoring_vector_server.id
+  allocation_id = var.monitoring_eip_allocation_id
+}
+

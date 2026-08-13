@@ -1,0 +1,30 @@
+replicaCount: 1
+
+image:
+  repository: pravinnpci/npci-forum-app
+  tag: latest
+  pullPolicy: Always
+
+service:
+  type: LoadBalancer
+  port: 80
+  targetPort: 3000
+
+env:
+  NODE_ENV: production
+  PORT: "3000"
+  DATABASE_URL: "postgres://npci_user:npci_password@postgres-service:5432/npci_db"
+  VECTOR_DB_URL: "http://vector-db-service:6333"
+
+postgres:
+  enabled: true
+  image: postgres:15-alpine
+  username: npci_user
+  password: npci_password
+  database: npci_db
+  storageSize: 10Gi
+
+vectordb:
+  enabled: true
+  image: qdrant/qdrant:latest
+  storageSize: 5Gi

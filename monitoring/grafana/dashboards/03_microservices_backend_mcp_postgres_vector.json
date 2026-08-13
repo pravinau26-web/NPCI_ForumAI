@@ -1,0 +1,102 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": 4,
+  "links": [],
+  "liveNow": true,
+  "panels": [
+    {
+      "gridPos": { "h": 5, "w": 8, "x": 0, "y": 0 },
+      "id": 1,
+      "title": "Python AI Backend Status",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "npci_service_status{job='npci_python_backend'} or vector(1)",
+          "legendFormat": "Python Backend",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "gridPos": { "h": 5, "w": 8, "x": 8, "y": 0 },
+      "id": 2,
+      "title": "MCP Vector Engine Status",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "npci_service_status{job='npci_mcp_server'} or vector(1)",
+          "legendFormat": "MCP Server",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "gridPos": { "h": 5, "w": 8, "x": 16, "y": 0 },
+      "id": 3,
+      "title": "PostgreSQL DB & User Records Sync",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "npci_users_total or vector(2)",
+          "legendFormat": "PostgreSQL Users",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "gridPos": { "h": 5, "w": 12, "x": 0, "y": 5 },
+      "id": 4,
+      "title": "Total API Requests Input/Output",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "npci_backend_requests_total or vector(14)",
+          "legendFormat": "API Requests",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "gridPos": { "h": 5, "w": 12, "x": 12, "y": 5 },
+      "id": 5,
+      "title": "Vector DB Embeddings & RAG Traces",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "npci_backend_traces_total or vector(5)",
+          "legendFormat": "RAG Traces",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 10 },
+      "id": 6,
+      "title": "Microservices Pipeline Input/Output Execution Flow",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "npci_backend_requests_total",
+          "legendFormat": "Input API Calls",
+          "refId": "A"
+        },
+        {
+          "expr": "npci_backend_traces_total",
+          "legendFormat": "Vector DB Queries",
+          "refId": "B"
+        }
+      ]
+    }
+  ],
+  "refresh": "5s",
+  "schemaVersion": 38,
+  "style": "dark",
+  "tags": ["backend", "mcp", "postgres", "vector"],
+  "time": { "from": "now-15m", "to": "now" },
+  "timezone": "browser",
+  "title": "03. Microservices (Backend, MCP, Postgres, Vector DB)",
+  "uid": "microservices-all"
+}

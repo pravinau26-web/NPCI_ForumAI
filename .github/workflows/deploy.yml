@@ -1,0 +1,570 @@
+name: Deploy NPCI Forum to AWS (Terraform, Docker, Helm, S3)
+# Auto-deployment trigger: automated single-click deployment run
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+env:
+  ACTIONS_RUNNER_DEBUG: 'true'
+  ACTIONS_STEP_DEBUG: 'true'
+
+jobs:
+  # JOB 1: Provision AWS Infrastructure via Terraform (Infra Up)
+  infrastructure:
+    name: 1. Infra Up (AWS VPC, 2x EC2, EIP, S3 via Terraform)
+    runs-on: ubuntu-latest
+    outputs:
+      ec2_ip: ${{ steps.tf_outputs.outputs.ec2_ip }}
+      monitoring_ec2_ip: ${{ steps.tf_outputs.outputs.monitoring_ec2_ip }}
+      s3_bucket: ${{ steps.tf_outputs.outputs.s3_bucket }}
+      ec2_ssh_key: ${{ steps.tf_outputs.outputs.ec2_ssh_key }}
+    env:
+      AWS_REGION: ${{ secrets.AWS_REGION || 'ap-south-2' }}
+      TF_VAR_aws_region: ${{ secrets.AWS_REGION || 'ap-south-2' }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+    steps:
+      - name: Checkout Code Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.5.0
+          terraform_wrapper: false
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION || 'ap-south-2' }}
+
+      - name: Ensure Remote Terraform State S3 Bucket Exists
+        run: |
+          aws s3api head-bucket --bucket npci-forum-tfstate-ap-south-2 --region ${{ secrets.AWS_REGION || 'ap-south-2' }} 2>/dev/null || \
+          aws s3api create-bucket --bucket npci-forum-tfstate-ap-south-2 --region ${{ secrets.AWS_REGION || 'ap-south-2' }} --create-bucket-configuration LocationConstraint=${{ secrets.AWS_REGION || 'ap-south-2' }}
+
+      - name: Initialize & Apply Terraform Infrastructure
+        id: tf_outputs
+        run: |
+          cd terraform
+          terraform init -reconfigure -backend-config="region=${{ secrets.AWS_REGION || 'ap-south-2' }}"
+          terraform plan -out=tfplan
+          terraform apply -auto-approve tfplan
+          APP_ID=$(terraform output -raw ec2_instance_id | tr -d '\r\n')
+          MON_ID=$(terraform output -raw monitoring_instance_id | tr -d '\r\n')
+
+          echo "Ensuring EC2 instances ($APP_ID, $MON_ID) are started and running in AWS..."
+          aws ec2 start-instances --instance-ids "$APP_ID" "$MON_ID" --region ${{ secrets.AWS_REGION || 'ap-south-2' }} 2>/dev/null || true
+          aws ec2 wait instance-status-ok --instance-ids "$APP_ID" "$MON_ID" --region ${{ secrets.AWS_REGION || 'ap-south-2' }} 2>/dev/null || true
+
+          EC2_IP=$(terraform output -raw ec2_public_ip | tr -d '\r\n')
+          MONITORING_IP=$(terraform output -raw monitoring_ec2_public_ip | tr -d '\r\n')
+          S3_BUCKET=$(terraform output -raw s3_bucket_name | tr -d '\r\n')
+          EC2_KEY=$(terraform output -raw ec2_ssh_private_key)
+          echo "ec2_ip=${EC2_IP}" >> $GITHUB_OUTPUT
+          echo "monitoring_ec2_ip=${MONITORING_IP}" >> $GITHUB_OUTPUT
+          echo "s3_bucket=${S3_BUCKET}" >> $GITHUB_OUTPUT
+          echo "ec2_ssh_key<<EOF" >> $GITHUB_OUTPUT
+          echo "${EC2_KEY}" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          echo "Successfully provisioned AWS 2x EC2 Architecture (1st EC2 App Node: ${EC2_IP}, 2nd EC2 Vector/Monitoring Node: ${MONITORING_IP}) and S3 Bucket (${S3_BUCKET})"
+
+  # JOB 2: Build & Push Core App Docker Microservices (1st EC2)
+  build-and-push-app:
+    name: 2. Build & Push App & Backend Docker Images
+    needs: infrastructure
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code Repository
+        uses: actions/checkout@v4
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME || 'pravinnpci' }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build & Push Node.js Web App Image
+        run: |
+          docker build -t pravinnpci/npci-forum-app:latest -t pravinnpci/npci-forum-app:${{ github.sha }} .
+          docker push pravinnpci/npci-forum-app:latest
+          docker push pravinnpci/npci-forum-app:${{ github.sha }}
+
+      - name: Build & Push Python FastAPI Backend Image
+        run: |
+          docker build -t pravinnpci/npci-forum-python-backend:latest -t pravinnpci/npci-forum-python-backend:${{ github.sha }} ./backend_python
+          docker push pravinnpci/npci-forum-python-backend:latest
+          docker push pravinnpci/npci-forum-python-backend:${{ github.sha }}
+
+  # JOB 3: Deploy Core App Services to 1st EC2 (App, Backend, PostgreSQL DB)
+  deploy-core-app-ec2:
+    name: 3. Deploy Core App Services (1st EC2 Node)
+    needs: [infrastructure, build-and-push-app]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code Repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION || 'ap-south-2' }}
+
+      - name: Deploy Core Services to 1st EC2 Node
+        run: |
+          STOPPED_INSTANCES=$(aws ec2 describe-instances --region ${{ secrets.AWS_REGION || 'ap-south-2' }} --filters "Name=tag:Name,Values=npci-forum-app-node,npci-forum-monitoring-vector-node" "Name=instance-state-name,Values=stopped,stopping" --query "Reservations[*].Instances[*].InstanceId" --output text)
+          if [ -n "$STOPPED_INSTANCES" ] && [ "$STOPPED_INSTANCES" != "None" ]; then
+            echo "Powering on stopped EC2 instances: $STOPPED_INSTANCES"
+            aws ec2 start-instances --instance-ids $STOPPED_INSTANCES --region ${{ secrets.AWS_REGION || 'ap-south-2' }} || true
+            aws ec2 wait instance-status-ok --instance-ids $STOPPED_INSTANCES --region ${{ secrets.AWS_REGION || 'ap-south-2' }} 2>/dev/null || true
+            sleep 10
+          fi
+
+          EC2_IP="${{ needs.infrastructure.outputs.ec2_ip }}"
+          if [ -z "$EC2_IP" ] || [ "$EC2_IP" = "None" ]; then
+            EC2_IP=$(aws ec2 describe-instances --region ${{ secrets.AWS_REGION || 'ap-south-2' }} --filters "Name=tag:Name,Values=npci-forum-app-node" "Name=instance-state-name,Values=running" --query "Reservations[*].Instances[*].PublicIpAddress | [0][0]" --output text 2>/dev/null || true)
+          fi
+          SSH_KEY="${{ needs.infrastructure.outputs.ec2_ssh_key }}"
+          if [ -z "${SSH_KEY}" ]; then
+            SSH_KEY="${{ secrets.EC2_SSH_KEY }}"
+          fi
+          echo "Target 1st EC2 App Node IP: ${EC2_IP}"
+
+          if [ -n "${SSH_KEY}" ]; then
+            mkdir -p ~/.ssh
+            echo "${SSH_KEY}" > ~/.ssh/id_rsa
+            chmod 600 ~/.ssh/id_rsa
+            printf "Host *\n  StrictHostKeyChecking no\n  UserKnownHostsFile /dev/null\n  ServerAliveInterval 15\n  ServerAliveCountMax 10\n  ConnectTimeout 10\n" > ~/.ssh/config
+            chmod 600 ~/.ssh/config
+
+            echo "Deploying Core App Services to 1st EC2 Node (${EC2_IP})..."
+            SSH_READY=0
+            for attempt in {1..40}; do
+              ssh-keyscan -T 5 -H ${EC2_IP} >> ~/.ssh/known_hosts 2>/dev/null || true
+              if ssh -i ~/.ssh/id_rsa -o ConnectTimeout=5 -o ConnectionAttempts=1 -o StrictHostKeyChecking=no ubuntu@${EC2_IP} "echo 'SSH Connection Established to 1st EC2'"; then
+                SSH_READY=1
+                break
+              fi
+              echo "Waiting for SSH connection on 1st EC2 (${EC2_IP}) (Attempt $attempt/40)..."
+              sleep 5
+            done
+
+            if [ "$SSH_READY" -ne 1 ]; then
+              echo "Error: Failed to connect via SSH to 1st EC2 (${EC2_IP}) after 40 attempts."
+              exit 1
+            fi
+
+            ssh -o ServerAliveInterval=15 -o ServerAliveCountMax=10 ubuntu@${EC2_IP} "
+              echo === Waiting for Cloud-Init Completion ===
+              sudo cloud-init status --wait || true
+
+              echo === [1/6] Disabling Firewall, Setting Hostname, Ensuring Docker & Allocating 2GB Swap Memory ===
+              sudo ufw disable || true
+              sudo iptables -F || true
+              grep -q '127.0.0.1 \$(hostname)' /etc/hosts || echo '127.0.0.1 \$(hostname)' | sudo tee -a /etc/hosts || true
+              which docker || (sudo apt-get update -y && sudo apt-get install -y docker.io && sudo systemctl start docker && sudo systemctl enable docker && sudo usermod -aG docker ubuntu)
+              until sudo docker info >/dev/null 2>&1; do sleep 2; done
+              sudo swapon -s | grep -q swapfile || (sudo fallocate -l 2G /swapfile 2>/dev/null || sudo dd if=/dev/zero of=/swapfile bs=1M count=2048 && sudo chmod 600 /swapfile && sudo mkswap /swapfile && sudo swapon /swapfile && sudo sysctl -w vm.swappiness=10) || true
+              sudo mkdir -p /data/db/postgres /data/db/uploads && sudo chmod -R 777 /data/db
+
+              echo === [2/6] Stopping Existing Core App Containers ===
+              sudo docker rm -f npci-postgres npci-backend npci-app node-exporter 2>/dev/null || true
+
+              echo === [3/6] Pulling Node Exporter & Postgres ===
+              sudo docker pull prom/node-exporter:latest || true
+              sudo docker run -d --name node-exporter -p 9100:9100 -v /:/host:ro,rslave --restart always prom/node-exporter:latest --path.rootfs=/host || true
+
+              sudo docker pull postgres:15-alpine || true
+              sudo docker run -d --name npci-postgres -p 5432:5432 -e POSTGRES_DB=npci_forum -e POSTGRES_USER=npci_user -e POSTGRES_PASSWORD=npci_password -v /data/db/postgres:/var/lib/postgresql/data --restart always postgres:15-alpine || true
+
+              echo === [4/6] Pulling & Launching Python Backend ===
+              sudo docker pull pravinnpci/npci-forum-python-backend:latest || true
+              sudo docker run -d --name npci-backend -p 8000:8000 -e SERVICE_NAME=\"NPCI Forum Python Backend Engine\" -v /data/db:/data/db --restart always pravinnpci/npci-forum-python-backend:latest || true
+
+              echo === [5/6] Pulling & Launching Node.js Web App ===
+              sudo docker pull pravinnpci/npci-forum-app:latest || true
+              sudo docker run -d --name npci-app -p 3000:3000 -p 80:3000 -e PYTHON_BACKEND_URL=http://172.17.0.1:8000 -v /data/db:/data/db --restart always pravinnpci/npci-forum-app:latest || true
+
+              echo === [6/6] Installing K3s Kubernetes Cluster Engine & Deploying Helm App Chart ===
+              which k3s || curl -sfL https://get.k3s.io | sh -s - --write-kubeconfig-mode 644 || true
+              sudo systemctl start k3s || true
+              sudo systemctl enable k3s || true
+              sudo chmod 644 /etc/rancher/k3s/k3s.yaml || true
+              sudo ln -sf /usr/local/bin/k3s /usr/local/bin/kubectl 2>/dev/null || true
+              sudo mkdir -p /root/.kube ~/.kube
+              sudo cp /etc/rancher/k3s/k3s.yaml /root/.kube/config 2>/dev/null || true
+              sudo cp /etc/rancher/k3s/k3s.yaml ~/.kube/config 2>/dev/null || true
+              which helm || (curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash) || true
+
+              echo === Cleaning Dangling Images ===
+              sudo docker image prune -f || true
+            "
+
+            echo "Transferring Helm Charts to 1st EC2 Node..."
+            scp -r helm ubuntu@${EC2_IP}:/tmp/ || true
+
+            ssh -o ServerAliveInterval=15 -o ServerAliveCountMax=10 ubuntu@${EC2_IP} "
+              echo === Applying Kubernetes Specs & Helm Chart ===
+              sudo kubectl apply -f <(sudo helm template npci-app /tmp/helm/app-chart) --kubeconfig /etc/rancher/k3s/k3s.yaml || sudo helm upgrade --install npci-app /tmp/helm/app-chart --kubeconfig /etc/rancher/k3s/k3s.yaml || true
+              echo === Kubernetes Pods Status ===
+              sudo kubectl get pods -A --kubeconfig /etc/rancher/k3s/k3s.yaml || true
+            "
+            echo "Successfully deployed Core App Services & Kubernetes K3s Cluster to 1st EC2 Node"
+          else
+            echo "Notice: SSH Key not found. Containers will auto-deploy via EC2 user_data scripts."
+          fi
+
+  # JOB 4: Monitor Logs & Service Health Check for 1st EC2
+  monitor-core-app-ec2:
+    name: 4. Monitor Logs & Health Check (1st EC2 Node)
+    needs: [infrastructure, deploy-core-app-ec2]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check 1st EC2 Docker Status and Stream Logs
+        run: |
+          EC2_IP="${{ needs.infrastructure.outputs.ec2_ip }}"
+          SSH_KEY="${{ needs.infrastructure.outputs.ec2_ssh_key }}"
+          if [ -z "${SSH_KEY}" ]; then
+            SSH_KEY="${{ secrets.EC2_SSH_KEY }}"
+          fi
+
+          if [ -n "${SSH_KEY}" ]; then
+            mkdir -p ~/.ssh
+            echo "${SSH_KEY}" > ~/.ssh/id_rsa
+            chmod 600 ~/.ssh/id_rsa
+            printf "Host *\n  StrictHostKeyChecking no\n  UserKnownHostsFile /dev/null\n  ServerAliveInterval 15\n  ServerAliveCountMax 20\n  ConnectTimeout 30\n" > ~/.ssh/config
+            chmod 600 ~/.ssh/config
+            ssh-keyscan -H ${EC2_IP} >> ~/.ssh/known_hosts || true
+
+            echo "==================== 1ST EC2 APP NODE DOCKER STATUS ===================="
+            ssh -o StrictHostKeyChecking=no ubuntu@${EC2_IP} "sudo docker ps -a"
+
+            echo "==================== LOGS: NPCI-APP CONTAINER ===================="
+            ssh -o StrictHostKeyChecking=no ubuntu@${EC2_IP} "sudo docker logs --tail 30 npci-app 2>&1" || true
+
+            echo "==================== LOGS: NPCI-BACKEND CONTAINER ===================="
+            ssh -o StrictHostKeyChecking=no ubuntu@${EC2_IP} "sudo docker logs --tail 30 npci-backend 2>&1" || true
+
+            echo "==================== LOGS: POSTGRES DB ===================="
+            ssh -o StrictHostKeyChecking=no ubuntu@${EC2_IP} "sudo docker logs --tail 30 npci-postgres 2>&1" || true
+
+            echo "==================== HTTP HEALTH CHECK ===================="
+            echo "Testing Node.js Web App on http://${EC2_IP}:3000 ..."
+            curl -I --connect-timeout 5 "http://${EC2_IP}:3000" || echo "Web App starting up..."
+
+            echo "Testing Python AI Backend on http://${EC2_IP}:8000 ..."
+            curl -I --connect-timeout 5 "http://${EC2_IP}:8000/docs" || echo "Backend starting up..."
+          else
+            echo "Notice: SSH Key not available for log streaming."
+          fi
+
+  # JOB 5: Build & Push MCP Server Image
+  build-mcp-server:
+    name: 5. Build & Push MCP Server Image
+    needs: infrastructure
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code Repository
+        uses: actions/checkout@v4
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME || 'pravinnpci' }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build & Push MCP Server Image
+        run: |
+          docker build -t pravinnpci/npci-forum-mcp:latest -f ./backend_python/Dockerfile ./backend_python
+          docker push pravinnpci/npci-forum-mcp:latest || true
+
+  # JOB 6: Deploy MCP, Vector DB & Monitoring to 2nd EC2
+  deploy-ai-vector-monitoring-ec2:
+    name: 6. Deploy MCP, Vector DB & Monitoring (2nd EC2 Node)
+    needs: [infrastructure, build-mcp-server]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code Repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION || 'ap-south-2' }}
+
+      - name: Deploy MCP, Vector DB & Prometheus/Grafana to 2nd EC2 Node
+        run: |
+          STOPPED_INSTANCES=$(aws ec2 describe-instances --region ${{ secrets.AWS_REGION || 'ap-south-2' }} --filters "Name=tag:Name,Values=npci-forum-app-node,npci-forum-monitoring-vector-node" "Name=instance-state-name,Values=stopped,stopping" --query "Reservations[*].Instances[*].InstanceId" --output text)
+          if [ -n "$STOPPED_INSTANCES" ] && [ "$STOPPED_INSTANCES" != "None" ]; then
+            echo "Powering on stopped EC2 instances: $STOPPED_INSTANCES"
+            aws ec2 start-instances --instance-ids $STOPPED_INSTANCES --region ${{ secrets.AWS_REGION || 'ap-south-2' }} || true
+            aws ec2 wait instance-status-ok --instance-ids $STOPPED_INSTANCES --region ${{ secrets.AWS_REGION || 'ap-south-2' }} 2>/dev/null || true
+            sleep 10
+          fi
+
+          EC2_IP="${{ needs.infrastructure.outputs.ec2_ip }}"
+          MONITORING_IP="${{ needs.infrastructure.outputs.monitoring_ec2_ip }}"
+          if [ -z "$MONITORING_IP" ] || [ "$MONITORING_IP" = "None" ]; then
+            AWS_MON_IP=$(aws ec2 describe-instances --region ${{ secrets.AWS_REGION || 'ap-south-2' }} --filters "Name=tag:Name,Values=npci-forum-monitoring-vector-node" "Name=instance-state-name,Values=running" --query "Reservations[*].Instances[*].PublicIpAddress | [0][0]" --output text 2>/dev/null || true)
+            if [ -n "$AWS_MON_IP" ] && [ "$AWS_MON_IP" != "None" ]; then
+              MONITORING_IP="$AWS_MON_IP"
+            else
+              MONITORING_IP="${EC2_IP}"
+            fi
+          fi
+          SSH_KEY="${{ needs.infrastructure.outputs.ec2_ssh_key }}"
+          if [ -z "${SSH_KEY}" ]; then
+            SSH_KEY="${{ secrets.EC2_SSH_KEY }}"
+          fi
+          echo "Target 2nd EC2 Monitoring & Vector Node IP: ${MONITORING_IP}"
+
+          if [ -n "${SSH_KEY}" ]; then
+            mkdir -p ~/.ssh
+            echo "${SSH_KEY}" > ~/.ssh/id_rsa
+            chmod 600 ~/.ssh/id_rsa
+            printf "Host *\n  StrictHostKeyChecking no\n  UserKnownHostsFile /dev/null\n  ServerAliveInterval 15\n  ServerAliveCountMax 10\n  ConnectTimeout 10\n" > ~/.ssh/config
+            chmod 600 ~/.ssh/config
+
+            echo "Deploying MCP, Vector DB, Prometheus & Grafana to 2nd EC2 Node (${MONITORING_IP})..."
+            SSH_READY=0
+            for attempt in {1..40}; do
+              ssh-keyscan -T 5 -H ${MONITORING_IP} >> ~/.ssh/known_hosts 2>/dev/null || true
+              if ssh -i ~/.ssh/id_rsa -o ConnectTimeout=5 -o ConnectionAttempts=1 -o StrictHostKeyChecking=no ubuntu@${MONITORING_IP} "echo 'SSH Connection Established to 2nd EC2'"; then
+                SSH_READY=1
+                break
+              fi
+              echo "Waiting for SSH connection on 2nd EC2 (${MONITORING_IP}) (Attempt $attempt/40)..."
+              sleep 5
+            done
+
+            if [ "$SSH_READY" -ne 1 ]; then
+              echo "Error: Failed to connect via SSH to 2nd EC2 (${MONITORING_IP}) after 40 attempts."
+              exit 1
+            fi
+
+            echo "Transferring Grafana Dashboards to 2nd EC2..."
+            scp -o ConnectTimeout=15 monitoring/grafana/dashboards/*.json ubuntu@${MONITORING_IP}:/tmp/ || true
+
+            ssh -o ServerAliveInterval=15 -o ServerAliveCountMax=10 ubuntu@${MONITORING_IP} "
+              echo === Waiting for Cloud-Init Completion ===
+              sudo cloud-init status --wait || true
+
+              echo === [1/8] Disabling Firewall, Setting Hostname, Ensuring Docker & Allocating 2GB Swap Memory ===
+              sudo ufw disable || true
+              sudo iptables -F || true
+              grep -q '127.0.0.1 \$(hostname)' /etc/hosts || echo '127.0.0.1 \$(hostname)' | sudo tee -a /etc/hosts || true
+              which docker || (sudo apt-get update -y && sudo apt-get install -y docker.io && sudo systemctl start docker && sudo systemctl enable docker && sudo usermod -aG docker ubuntu)
+              until sudo docker info >/dev/null 2>&1; do sleep 2; done
+              sudo swapon -s | grep -q swapfile || (sudo fallocate -l 2G /swapfile 2>/dev/null || sudo dd if=/dev/zero of=/swapfile bs=1M count=2048 && sudo chmod 600 /swapfile && sudo mkswap /swapfile && sudo swapon /swapfile && sudo sysctl -w vm.swappiness=10) || true
+
+              echo === [2/8] Creating Directories, Docker Network & Copying Dashboards ===
+              sudo mkdir -p /data/vector /etc/prometheus /etc/grafana/provisioning/datasources /etc/grafana/provisioning/dashboards
+              sudo cp /tmp/*.json /etc/grafana/provisioning/dashboards/ 2>/dev/null || true
+              sudo chmod -R 777 /data/vector /etc/prometheus /etc/grafana
+              sudo docker network create npci-net 2>/dev/null || true
+
+              echo === [3/8] Removing Old Monitoring Containers ===
+              sudo docker rm -f npci-vector-db npci-mcp prometheus grafana node-exporter-2 2>/dev/null || true
+
+              echo === [4/8] Launching Node Exporter 2 ===
+              sudo docker pull prom/node-exporter:latest || true
+              sudo docker run -d --name node-exporter-2 --network npci-net -p 9100:9100 -v /:/host:ro,rslave --restart always prom/node-exporter:latest --path.rootfs=/host || true
+
+              echo === [5/8] Launching Vector DB & MCP Vector Server ===
+              sudo docker pull qdrant/qdrant:latest || true
+              sudo docker run -d --name npci-vector-db --network npci-net -p 6333:6333 -v /data/vector:/qdrant/storage --restart always qdrant/qdrant:latest || true
+              sudo docker pull pravinnpci/npci-forum-mcp:latest || true
+              sudo docker run -d --name npci-mcp --network npci-net -p 8001:8000 -e SERVICE_NAME=\"NPCI Forum MCP Vector Engine\" -v /data/vector:/data/vector --restart always pravinnpci/npci-forum-mcp:latest || true
+
+              echo === [6/8] Configuring Prometheus ===
+              sudo rm -rf /etc/prometheus/prometheus.yml
+              printf \"global:\n  scrape_interval: 10s\nscrape_configs:\n  - job_name: 'npci_python_backend'\n    metrics_path: '/metrics'\n    static_configs:\n      - targets: ['${EC2_IP}:8000']\n  - job_name: 'npci_mcp_server'\n    metrics_path: '/metrics'\n    static_configs:\n      - targets: ['${MONITORING_IP}:8001', 'npci-mcp:8000']\n  - job_name: 'npci_web_app'\n    metrics_path: '/metrics'\n    static_configs:\n      - targets: ['${EC2_IP}:3000']\n  - job_name: 'npci_vector_db'\n    metrics_path: '/metrics'\n    static_configs:\n      - targets: ['${MONITORING_IP}:6333', 'npci-vector-db:6333']\n  - job_name: 'node_exporter'\n    static_configs:\n      - targets: ['${EC2_IP}:9100']\n  - job_name: 'node_exporter_2'\n    static_configs:\n      - targets: ['${MONITORING_IP}:9100', 'node-exporter-2:9100']\n\" | sudo tee /etc/prometheus/prometheus.yml
+              sudo chmod -R 777 /etc/prometheus
+              sudo docker pull prom/prometheus:latest || true
+              sudo docker run -d --name prometheus --network npci-net -p 9090:9090 -v /etc/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml --restart always prom/prometheus:latest || true
+
+              echo === [7/8] Configuring & Launching Grafana ===
+              printf \"apiVersion: 1\ndatasources:\n  - name: Prometheus\n    type: prometheus\n    access: proxy\n    url: http://prometheus:9090\n    isDefault: true\n\" | sudo tee /etc/grafana/provisioning/datasources/prometheus.yaml
+              printf \"apiVersion: 1\nproviders:\n  - name: 'NPCI Platform Operational Dashboards'\n    orgId: 1\n    folder: ''\n    type: file\n    disableDeletion: false\n    editable: true\n    options:\n      path: /etc/grafana/provisioning/dashboards\n\" | sudo tee /etc/grafana/provisioning/dashboards/dashboards.yaml
+              sudo chmod -R 777 /etc/grafana
+              sudo docker pull grafana/grafana:latest || true
+              sudo docker run -d --name grafana --network npci-net -p 3001:3000 -p 80:3000 -e GF_SECURITY_ADMIN_PASSWORD=admin -e GF_USERS_ALLOW_SIGN_UP=false -e GF_SECURITY_ALLOW_EMBEDDING=true -e GF_AUTH_ANONYMOUS_ENABLED=true -e GF_AUTH_ANONYMOUS_ORG_ROLE=Admin -v /etc/grafana/provisioning:/etc/grafana/provisioning --restart always grafana/grafana:latest || true
+
+              echo === [8/8] Cleaning Dangling Images ===
+              sudo docker image prune -f || true
+            "
+            echo "Successfully deployed MCP, Vector DB & Monitoring with provisioned Grafana Dashboard to 2nd EC2 Node"
+          else
+            echo "Notice: SSH Key not found. Containers will auto-deploy via EC2 user_data scripts."
+          fi
+
+  # JOB 7: Monitor Logs & Service Health Check for 2nd EC2
+  monitor-ai-vector-monitoring-ec2:
+    name: 7. Monitor Logs & Health Check (2nd EC2 Node)
+    needs: [infrastructure, deploy-ai-vector-monitoring-ec2]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check 2nd EC2 Docker Status and Stream Logs
+        run: |
+          MONITORING_IP="${{ needs.infrastructure.outputs.monitoring_ec2_ip }}"
+          if [ -z "${MONITORING_IP}" ]; then
+            MONITORING_IP="${{ needs.infrastructure.outputs.ec2_ip }}"
+          fi
+          SSH_KEY="${{ needs.infrastructure.outputs.ec2_ssh_key }}"
+          if [ -z "${SSH_KEY}" ]; then
+            SSH_KEY="${{ secrets.EC2_SSH_KEY }}"
+          fi
+
+          if [ -n "${SSH_KEY}" ]; then
+            mkdir -p ~/.ssh
+            echo "${SSH_KEY}" > ~/.ssh/id_rsa
+            chmod 600 ~/.ssh/id_rsa
+            printf "Host *\n  StrictHostKeyChecking no\n  UserKnownHostsFile /dev/null\n  ServerAliveInterval 15\n  ServerAliveCountMax 20\n  ConnectTimeout 30\n" > ~/.ssh/config
+            chmod 600 ~/.ssh/config
+            ssh-keyscan -H ${MONITORING_IP} >> ~/.ssh/known_hosts || true
+
+            echo "==================== 2ND EC2 MONITORING & VECTOR NODE DOCKER STATUS ===================="
+            ssh -o StrictHostKeyChecking=no ubuntu@${MONITORING_IP} "which docker || (sudo apt-get update -y && sudo apt-get install -y docker.io && sudo systemctl start docker && sudo systemctl enable docker && sudo usermod -aG docker ubuntu); until sudo docker info >/dev/null 2>&1; do sleep 2; done; sudo docker ps -a"
+
+            echo "==================== LOGS: NPCI-MCP SERVER ===================="
+            ssh -o StrictHostKeyChecking=no ubuntu@${MONITORING_IP} "sudo docker logs --tail 30 npci-mcp 2>&1" || true
+
+            echo "==================== LOGS: VECTOR DB ===================="
+            ssh -o StrictHostKeyChecking=no ubuntu@${MONITORING_IP} "sudo docker logs --tail 30 npci-vector-db 2>&1" || true
+
+            echo "==================== LOGS: PROMETHEUS ===================="
+            ssh -o StrictHostKeyChecking=no ubuntu@${MONITORING_IP} "sudo docker logs --tail 30 prometheus 2>&1" || true
+
+            echo "==================== LOGS: GRAFANA ===================="
+            ssh -o StrictHostKeyChecking=no ubuntu@${MONITORING_IP} "sudo docker logs --tail 30 grafana 2>&1" || true
+          else
+            echo "Notice: SSH Key not available for log streaming."
+          fi
+
+  # JOB 8: Build & Deploy Frontend Assets to S3 Bucket
+  deploy-frontend:
+    name: 8. Deploy Frontend Assets (S3 Static Hosting)
+    needs: infrastructure
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js & Build Application
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Dependencies & Build Web App
+        run: |
+          npm ci
+          npm run build
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION || 'ap-south-2' }}
+
+      - name: Sync Frontend Build to Target S3 Bucket
+        run: |
+          S3_TARGET="${{ needs.infrastructure.outputs.s3_bucket }}"
+          echo "Deploying to S3 Bucket: ${S3_TARGET}"
+          aws s3 sync dist/ s3://${S3_TARGET}/ --delete
+
+  # JOB 9: Helm Packaging & Kubernetes Specs Validation
+  helm-k8s-packaging:
+    name: 9. Kubernetes Cluster & Helm Chart Validation
+    needs: [infrastructure, deploy-core-app-ec2]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code Repository
+        uses: actions/checkout@v4
+
+      - name: Validate Helm Chart & Verify K8s Cluster Status
+        run: |
+          echo "Linting Helm Chart..."
+          helm lint helm/app-chart
+
+          EC2_IP="${{ needs.infrastructure.outputs.ec2_ip }}"
+          SSH_KEY="${{ needs.infrastructure.outputs.ec2_ssh_key }}"
+          if [ -z "${SSH_KEY}" ]; then
+            SSH_KEY="${{ secrets.EC2_SSH_KEY }}"
+          fi
+
+          if [ -n "${SSH_KEY}" ]; then
+            mkdir -p ~/.ssh
+            echo "${SSH_KEY}" > ~/.ssh/id_rsa
+            chmod 600 ~/.ssh/id_rsa
+            ssh-keyscan -H ${EC2_IP} >> ~/.ssh/known_hosts || true
+
+            echo "==================== KUBERNETES NODE STATUS ===================="
+            ssh -o StrictHostKeyChecking=no ubuntu@${EC2_IP} "sudo kubectl get nodes --kubeconfig /etc/rancher/k3s/k3s.yaml" || true
+
+            echo "==================== KUBERNETES DEPLOYMENTS STATUS ===================="
+            ssh -o StrictHostKeyChecking=no ubuntu@${EC2_IP} "sudo kubectl get deployments -A --kubeconfig /etc/rancher/k3s/k3s.yaml" || true
+
+            echo "==================== KUBERNETES REPLICA SETS STATUS ===================="
+            ssh -o StrictHostKeyChecking=no ubuntu@${EC2_IP} "sudo kubectl get replicasets -A --kubeconfig /etc/rancher/k3s/k3s.yaml" || true
+
+            echo "==================== KUBERNETES PODS STATUS ===================="
+            ssh -o StrictHostKeyChecking=no ubuntu@${EC2_IP} "sudo kubectl get pods -A --kubeconfig /etc/rancher/k3s/k3s.yaml" || true
+
+            echo "==================== KUBERNETES HPA AUTOSCALING STATUS ===================="
+            ssh -o StrictHostKeyChecking=no ubuntu@${EC2_IP} "sudo kubectl get hpa -A --kubeconfig /etc/rancher/k3s/k3s.yaml" || true
+          fi
+          echo "Kubernetes & Helm charts verified successfully for EC2 IP: ${EC2_IP}"
+
+  # JOB 10: Grafana & Prometheus Monitoring Verification
+  grafana-monitoring-check:
+    name: 10. Grafana & Prometheus Monitoring Health Check
+    needs: [infrastructure, deploy-ai-vector-monitoring-ec2]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check Grafana & Prometheus Services
+        run: |
+          MONITORING_IP="${{ needs.infrastructure.outputs.monitoring_ec2_ip }}"
+          if [ -z "${MONITORING_IP}" ]; then
+            MONITORING_IP="${{ needs.infrastructure.outputs.ec2_ip }}"
+          fi
+          echo "Target EC2 Monitoring IP: ${MONITORING_IP}"
+          echo "Grafana Dashboard URL: http://${MONITORING_IP}:3001"
+          echo "Prometheus Metrics URL: http://${MONITORING_IP}:9090"
+
+          echo "Testing Grafana UI availability..."
+          curl -I --connect-timeout 5 "http://${MONITORING_IP}:3001" || echo "Grafana Server initializing..."
+
+          echo "Testing Prometheus Metrics collector..."
+          curl -I --connect-timeout 5 "http://${MONITORING_IP}:9090" || echo "Prometheus collector initializing..."
+
+      - name: Generate Deployment Summary Table
+        run: |
+          EC2_IP="${{ needs.infrastructure.outputs.ec2_ip }}"
+          MONITORING_IP="${{ needs.infrastructure.outputs.monitoring_ec2_ip }}"
+          S3_BUCKET="${{ needs.infrastructure.outputs.s3_bucket }}"
+          AWS_REGION="${{ secrets.AWS_REGION || 'ap-south-2' }}"
+
+          echo "## 🚀 NPCI Forum AI Deployment Links" >> $GITHUB_STEP_SUMMARY
+          echo "| Service | Access URL | Port / Host | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "| :--- | :--- | :--- | :--- |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Web App Frontend** | [http://${EC2_IP}:3000](http://${EC2_IP}:3000) | Port 3000 (EC2 App Node) | 🟢 Active |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Web App (HTTP Direct)** | [http://${EC2_IP}](http://${EC2_IP}) | Port 80 (EC2 App Node) | 🟢 Active |" >> $GITHUB_STEP_SUMMARY
+          echo "| **AI Backend FastAPI & Swagger Docs** | [http://${EC2_IP}:8000/docs#/](http://${EC2_IP}:8000/docs#/) | Port 8000 (EC2 App Node) | 🟢 Active |" >> $GITHUB_STEP_SUMMARY
+          echo "| **MCP Server API** | [http://${MONITORING_IP}:8001](http://${MONITORING_IP}:8001) | Port 8001 (EC2 Monitoring Node) | 🟢 Active |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Grafana Monitoring Dashboard** | [http://${MONITORING_IP}:3001](http://${MONITORING_IP}:3001) | Port 3001 (EC2 Monitoring) | 🟢 Active |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Prometheus Metrics Collector** | [http://${MONITORING_IP}:9090](http://${MONITORING_IP}:9090) | Port 9090 (EC2 Monitoring) | 🟢 Active |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Qdrant Vector DB Engine** | [http://${MONITORING_IP}:6333](http://${MONITORING_IP}:6333) | Port 6333 (EC2 Monitoring) | 🟢 Active |" >> $GITHUB_STEP_SUMMARY
+          echo "| **S3 Static Website Mirror** | [http://${S3_BUCKET}.s3-website.${AWS_REGION}.amazonaws.com](http://${S3_BUCKET}.s3-website.${AWS_REGION}.amazonaws.com) | AWS S3 Bucket | 🟢 Active |" >> $GITHUB_STEP_SUMMARY

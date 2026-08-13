@@ -1,0 +1,20 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ .Release.Name }}-log-purger
+spec:
+  schedule: "0 2 * * *" # Runs every day at 2 AM
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+            - name: log-purger
+              image: python:3.11-slim
+              command: ["python", "/app/log_purger.py"]
+              env:
+                - name: MAX_LOG_AGE_DAYS
+                  value: "7"
+                - name: LOG_DIR
+                  value: "/var/log/npci-forum"
+          restartPolicy: OnFailure
