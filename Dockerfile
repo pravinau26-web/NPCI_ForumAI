@@ -19,7 +19,7 @@ WORKDIR /app
 RUN mkdir -p /data /app/storage /app/storage/s3_assets && chmod -R 777 /data /app/storage
 
 COPY package*.json ./
-RUN npm ci --only=production
+RUN npm ci --omit=dev
 
 COPY --from=builder /app/dist ./dist
 
