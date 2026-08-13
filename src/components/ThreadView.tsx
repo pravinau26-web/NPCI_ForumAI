@@ -95,13 +95,24 @@ export default function ThreadView({
       files.map((file) => {
         return new Promise<Attachment>((resolve) => {
           const reader = new FileReader();
+          const ext = file.name.split('.').pop()?.toLowerCase() || '';
+          let mimeType = file.type;
+          if (!mimeType || mimeType === "application/octet-stream") {
+            if (ext === "pdf") mimeType = "application/pdf";
+            else if (ext === "docx" || ext === "doc") mimeType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+            else if (ext === "xlsx" || ext === "xls") mimeType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+            else if (ext === "csv") mimeType = "text/csv";
+            else if (["jpg", "jpeg", "png", "gif", "webp", "svg"].includes(ext)) mimeType = `image/${ext === "jpg" ? "jpeg" : ext}`;
+            else mimeType = "application/octet-stream";
+          }
+
           reader.onloadend = () => {
             const sizeStr = file.size > 1024 * 1024 
               ? `${(file.size / (1024 * 1024)).toFixed(1)} MB`
               : `${(file.size / 1024).toFixed(0)} KB`;
             resolve({
               name: file.name,
-              type: file.type || "application/octet-stream",
+              type: mimeType,
               size: sizeStr,
               url: reader.result as string,
             });

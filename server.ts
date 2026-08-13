@@ -225,6 +225,27 @@ const vectorDb = new VectorDatabase();
 app.use(express.json({ limit: '10mb' }));
 app.use("/storage/minio_s3", express.static(path.join(process.cwd(), "storage", "minio_s3")));
 
+// Global Auto-Persist Middleware: Guarantees every successful mutation is instantly flushed to disk volume
+app.use((req, res, next) => {
+  if (["POST", "PUT", "DELETE", "PATCH"].includes(req.method)) {
+    const originalJson = res.json.bind(res);
+    const originalSend = res.send.bind(res);
+    res.json = function(body: any) {
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        setImmediate(() => saveDataToDisk());
+      }
+      return originalJson(body);
+    };
+    res.send = function(body: any) {
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        setImmediate(() => saveDataToDisk());
+      }
+      return originalSend(body);
+    };
+  }
+  next();
+});
+
 // ==========================================
 // IN-MEMORY DATABASE STATE (WITH SEED DATA)
 // ==========================================
@@ -863,6 +884,7 @@ const STORAGE_DIR = process.env.DATA_VOLUME_PATH
   || (fs.existsSync("/data") ? "/data" : path.join(process.cwd(), "storage"));
 
 const DATA_FILE_PATH = path.join(STORAGE_DIR, "forum_data.json");
+const BACKUP_FILE_PATH = path.join(STORAGE_DIR, "forum_data_backup.json");
 
 function ensureStorageDirExists() {
   try {
@@ -887,9 +909,16 @@ function saveDataToDisk() {
       notifications,
       policyDocuments,
       auditLogs,
-      deptRoleList
+      deptRoleList,
+      stickyNotes
     };
-    fs.writeFileSync(DATA_FILE_PATH, JSON.stringify(payload, null, 2), "utf-8");
+    const jsonStr = JSON.stringify(payload, null, 2);
+    
+    // Write primary file
+    fs.writeFileSync(DATA_FILE_PATH, jsonStr, "utf-8");
+    
+    // Also maintain a backup copy for fail-safe recovery
+    fs.writeFileSync(BACKUP_FILE_PATH, jsonStr, "utf-8");
   } catch (err) {
     console.error("[Persistent Volume Save Error]:", err);
   }
@@ -898,8 +927,24 @@ function saveDataToDisk() {
 function loadDataFromDisk() {
   try {
     ensureStorageDirExists();
+    let fileToRead = null;
+    
     if (fs.existsSync(DATA_FILE_PATH)) {
-      const raw = fs.readFileSync(DATA_FILE_PATH, "utf-8");
+      const stats = fs.statSync(DATA_FILE_PATH);
+      if (stats.size > 10) {
+        fileToRead = DATA_FILE_PATH;
+      }
+    }
+    
+    if (!fileToRead && fs.existsSync(BACKUP_FILE_PATH)) {
+      const bStats = fs.statSync(BACKUP_FILE_PATH);
+      if (bStats.size > 10) {
+        fileToRead = BACKUP_FILE_PATH;
+      }
+    }
+
+    if (fileToRead) {
+      const raw = fs.readFileSync(fileToRead, "utf-8");
       if (raw.trim()) {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed.users) && parsed.users.length > 0) users = parsed.users;
@@ -912,7 +957,8 @@ function loadDataFromDisk() {
         if (Array.isArray(parsed.policyDocuments) && parsed.policyDocuments.length > 0) policyDocuments = parsed.policyDocuments;
         if (Array.isArray(parsed.auditLogs)) auditLogs = parsed.auditLogs;
         if (Array.isArray(parsed.deptRoleList) && parsed.deptRoleList.length > 0) deptRoleList = parsed.deptRoleList;
-        console.log(`[Persistent Volume]: Successfully loaded data from ${DATA_FILE_PATH} (${users.length} users, ${communities.length} communities, ${threads.length} threads)`);
+        if (Array.isArray(parsed.stickyNotes)) stickyNotes = parsed.stickyNotes;
+        console.log(`[Persistent Volume]: Successfully loaded data from ${fileToRead} (${users.length} users, ${communities.length} communities, ${threads.length} threads, ${chatMessages.length} chat messages)`);
       }
     } else {
       console.log(`[Persistent Volume]: No existing data file found at ${DATA_FILE_PATH}. Initializing default dataset.`);
@@ -925,6 +971,26 @@ function loadDataFromDisk() {
 
 // Load persisted data state on server startup
 loadDataFromDisk();
+
+// Periodic automatic disk flush every 5 seconds
+setInterval(saveDataToDisk, 5000);
+
+// Flush data on process termination signals
+process.on("SIGINT", () => {
+  console.log("[Persistent Volume]: Flushing data before SIGINT exit...");
+  saveDataToDisk();
+  process.exit(0);
+});
+
+process.on("SIGTERM", () => {
+  console.log("[Persistent Volume]: Flushing data before SIGTERM exit...");
+  saveDataToDisk();
+  process.exit(0);
+});
+
+process.on("beforeExit", () => {
+  saveDataToDisk();
+});
 
 // ==========================================
 // GEMINI AI INTEGRATION ENGINE

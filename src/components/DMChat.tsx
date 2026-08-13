@@ -101,13 +101,24 @@ export default function DMChat({
     const promises = files.map((file) => {
       return new Promise<Attachment>((resolve) => {
         const reader = new FileReader();
+        const ext = file.name.split('.').pop()?.toLowerCase() || '';
+        let mimeType = file.type;
+        if (!mimeType || mimeType === "application/octet-stream") {
+          if (ext === "pdf") mimeType = "application/pdf";
+          else if (ext === "docx" || ext === "doc") mimeType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+          else if (ext === "xlsx" || ext === "xls") mimeType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+          else if (ext === "csv") mimeType = "text/csv";
+          else if (["jpg", "jpeg", "png", "gif", "webp", "svg"].includes(ext)) mimeType = `image/${ext === "jpg" ? "jpeg" : ext}`;
+          else mimeType = "application/octet-stream";
+        }
+
         reader.onloadend = () => {
           const sizeStr = file.size > 1024 * 1024 
             ? `${(file.size / (1024 * 1024)).toFixed(1)} MB`
             : `${(file.size / 1024).toFixed(0)} KB`;
           resolve({
             name: file.name,
-            type: file.type || "application/octet-stream",
+            type: mimeType,
             size: sizeStr,
             url: reader.result as string,
           });
@@ -608,12 +619,17 @@ export default function DMChat({
                           {msg.attachments && msg.attachments.length > 0 && (
                             <div className="mt-3 pt-2 border-t border-slate-100/20 space-y-2 max-w-sm">
                               {msg.attachments.map((file, idx) => {
-                                const isImage = file.type.startsWith("image/");
+                                const nameL = (file.name || "").toLowerCase();
+                                const isImage = file.type.startsWith("image/") || /\.(jpg|jpeg|png|webp|gif|svg)$/i.test(nameL);
+                                const isPdf = file.type === "application/pdf" || nameL.endsWith(".pdf");
+                                const isWord = file.type.includes("word") || file.type.includes("officedocument.wordprocessingml") || /\.(docx|doc)$/i.test(nameL);
+                                const isSheet = file.type.includes("sheet") || file.type.includes("excel") || file.type.includes("csv") || /\.(xlsx|xls|csv)$/i.test(nameL);
+
                                 return (
                                   <div 
                                     key={idx} 
                                     onClick={() => onPreviewAttachment && onPreviewAttachment(file)}
-                                    className="rounded-xl overflow-hidden border border-slate-200/20 cursor-pointer hover:border-blue-500/50 transition group"
+                                    className="rounded-xl overflow-hidden border border-slate-200/30 cursor-pointer hover:border-blue-500/60 transition group shadow-xs"
                                   >
                                     {isImage ? (
                                       <div className="bg-slate-100 dark:bg-slate-800 flex justify-center items-center relative">
@@ -628,16 +644,32 @@ export default function DMChat({
                                       </div>
                                     ) : (
                                       <div
-                                        className={`flex items-center gap-2 p-2.5 text-xs transition truncate ${
+                                        className={`flex items-center gap-2.5 p-3 text-xs transition truncate ${
                                           isMe 
-                                            ? "bg-white/10 text-white hover:bg-white/20" 
-                                            : "bg-slate-50 text-slate-700 hover:bg-slate-100 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+                                            ? "bg-white/15 text-white hover:bg-white/25" 
+                                            : "bg-slate-50 text-slate-800 hover:bg-slate-100 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
                                         }`}
                                       >
-                                        <Paperclip className="w-4 h-4 text-blue-500 flex-shrink-0" />
+                                        <div className={`p-2 rounded-lg text-white ${
+                                          isPdf ? "bg-rose-600" :
+                                          isWord ? "bg-blue-600" :
+                                          isSheet ? "bg-emerald-600" :
+                                          "bg-indigo-600"
+                                        }`}>
+                                          {isPdf ? <FileText className="w-4 h-4" /> :
+                                           isWord ? <FileText className="w-4 h-4" /> :
+                                           isSheet ? <FileText className="w-4 h-4" /> :
+                                           <Paperclip className="w-4 h-4" />}
+                                        </div>
                                         <div className="truncate text-left flex-1 min-w-0">
-                                          <p className="font-semibold truncate leading-tight group-hover:text-blue-400 transition-colors">{file.name}</p>
-                                          <p className="text-[10px] opacity-75 mt-0.5 font-mono">{file.size} • Click to Preview</p>
+                                          <p className="font-bold truncate leading-tight group-hover:text-blue-400 transition-colors">{file.name}</p>
+                                          <div className="flex items-center gap-1.5 mt-0.5">
+                                            <span className="text-[10px] opacity-75 font-mono">{file.size}</span>
+                                            <span className="text-[9px] uppercase font-bold px-1.5 py-0.2 bg-black/20 rounded">
+                                              {isPdf ? "PDF" : isWord ? "WORD" : isSheet ? "EXCEL" : "DOC"}
+                                            </span>
+                                            <span className="text-[10px] text-blue-400 font-semibold">• Preview</span>
+                                          </div>
                                         </div>
                                       </div>
                                     )}
