@@ -122,13 +122,16 @@ export default function App() {
     }
   };
 
-  const handleOpenPdfViewer = (fileName: string, title?: string) => {
+  const handleOpenPdfViewer = (fileName: string, title?: string, pdfData?: string) => {
     const found = policies.find(p => 
       p.fileName.toLowerCase() === fileName.toLowerCase() || 
       (title && p.title.toLowerCase() === title.toLowerCase())
     );
     if (found) {
-      setPdfViewerPolicy(found);
+      setPdfViewerPolicy({
+        ...found,
+        pdfData: pdfData || found.pdfData
+      });
     } else {
       setPdfViewerPolicy({
         id: `virtual-${Date.now()}`,
@@ -138,14 +141,28 @@ export default function App() {
         version: "1.0",
         uploadedBy: "system",
         uploadedAt: new Date().toISOString(),
+        pdfData: pdfData,
         chunks: [
           {
-            section: "Document Contents",
+            section: "Document Contents & Overview",
             text: `This document (${fileName}) is a secure shared workspace attachment. Its contents are fully validated and monitored for compliance under FIPS 140-3 protocols.`
+          },
+          {
+            section: "Operational Directives & Compliance Standards",
+            text: `All payment gateway switches, acquiring operations, and APIs must follow standard directives for ${fileName}.`
           }
         ],
         type: "spec"
       });
+    }
+  };
+
+  const handlePreviewAttachment = (att: Attachment) => {
+    const isPdf = (att.type || "").toLowerCase().includes("pdf") || (att.name || "").toLowerCase().endsWith(".pdf");
+    if (isPdf) {
+      handleOpenPdfViewer(att.name, undefined, (att.url && (att.url.startsWith("data:") || att.url.startsWith("blob:") || att.url.startsWith("http"))) ? att.url : undefined);
+    } else {
+      setPreviewAttachment(att);
     }
   };
 
@@ -981,7 +998,7 @@ export default function App() {
               onUpdateCommunityMembers={handleUpdateCommunityMembers}
               policies={policies}
               onViewProfile={setSelectedProfileUser}
-              onPreviewAttachment={setPreviewAttachment}
+              onPreviewAttachment={handlePreviewAttachment}
             />
           )}
 
@@ -1000,7 +1017,7 @@ export default function App() {
               onAskProductAi={handleAskProductAi}
               isAiResponding={isAiResponding}
               onViewProfile={setSelectedProfileUser}
-              onPreviewAttachment={setPreviewAttachment}
+              onPreviewAttachment={handlePreviewAttachment}
             />
           )}
 

@@ -1,0 +1,492 @@
+{
+  "users": [
+    {
+      "id": "user-ceo-dilip",
+      "username": "Dilip asbe",
+      "email": "dilip.asbe@npci.org.in",
+      "role": "platform_admin",
+      "status": "offline",
+      "avatar": "https://images.unsplash.com/photo-1560250097-0b93528c311a?auto=format&fit=crop&w=150&q=80",
+      "department": "Executive Board",
+      "bio": "Managing Director & CEO of National Payments Corporation of India (NPCI). Leading payment revolution in India.",
+      "password": "npciforum@01"
+    },
+    {
+      "id": "user-platform-admin-special",
+      "username": "NPCI_Forum",
+      "email": "admin@npci.org.in",
+      "role": "platform_admin",
+      "status": "offline",
+      "avatar": "https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?auto=format&fit=crop&w=150&q=80",
+      "department": "Security & Governance",
+      "bio": "Chief Platform Administrator of internal systems and audits.",
+      "password": "npciforum@01",
+      "reportsTo": "user-ceo-dilip"
+    },
+    {
+      "id": "user-1",
+      "username": "pravin",
+      "email": "pravinau26@gmail.com",
+      "role": "lead",
+      "status": "offline",
+      "avatar": "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80",
+      "department": "UPI Core Development",
+      "bio": "Lead developer on NPCI UPI APIs and instant payments.",
+      "password": "npciforum@01",
+      "reportsTo": "user-ceo-dilip"
+    },
+    {
+      "id": "user-2",
+      "username": "neha_compliance",
+      "email": "neha@npci.org.in",
+      "role": "policy_admin",
+      "status": "offline",
+      "avatar": "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=150&q=80",
+      "department": "Risk & Compliance",
+      "bio": "Compliance Officer at NPCI, managing policy changes and regulatory requirements.",
+      "password": "npciforum@01",
+      "reportsTo": "user-ceo-dilip"
+    },
+    {
+      "id": "user-3",
+      "username": "amit_platform",
+      "email": "amit@npci.org.in",
+      "role": "employee",
+      "status": "offline",
+      "avatar": "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&q=80",
+      "department": "Platform Engineering",
+      "bio": "Systems and Kubernetes cluster engineer.",
+      "password": "npciforum@01",
+      "reportsTo": "user-platform-admin-special"
+    },
+    {
+      "id": "npci_assistant",
+      "username": "NPCI Assistant",
+      "email": "npci_assistant@npci.org.in",
+      "role": "employee",
+      "status": "online",
+      "avatar": "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=150&q=80",
+      "department": "Artificial Intelligence",
+      "bio": "AI Assistant grounded on official NPCI policies (UPI, RuPay, AePS, etc.).",
+      "password": "npciforum@01",
+      "reportsTo": "user-platform-admin-special"
+    },
+    {
+      "id": "user-5",
+      "username": "priya_s",
+      "email": "priya@npci.org.in",
+      "role": "employee",
+      "status": "away",
+      "avatar": "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?auto=format&fit=crop&w=150&q=80",
+      "department": "Bharat BillPay (BBPS)",
+      "bio": "UI/UX developer working on the BBPS agent application.",
+      "password": "npciforum@01",
+      "reportsTo": "user-1"
+    },
+    {
+      "id": "user-6",
+      "username": "rajesh_kumar",
+      "email": "rajesh@npci.org.in",
+      "role": "employee",
+      "status": "offline",
+      "avatar": "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=150&q=80",
+      "department": "AePS Operations",
+      "bio": "Operations Lead for Aadhaar Enabled Payment System.",
+      "password": "npciforum@01",
+      "reportsTo": "user-2"
+    }
+  ],
+  "communities": [
+    {
+      "id": "comm-1",
+      "name": "UPI 2.0 Compliance",
+      "description": "Threads regarding UPI 2.0 transaction limits, merchant onboarding, and UDIR guidelines.",
+      "createdBy": "user-2",
+      "createdAt": "2026-07-14T19:49:57.527Z",
+      "isPrivate": false,
+      "memberIds": [
+        "user-1",
+        "user-2",
+        "user-3",
+        "user-5",
+        "user-6",
+        "npci_assistant"
+      ]
+    },
+    {
+      "id": "comm-2",
+      "name": "RuPay Technical Specs",
+      "description": "Discussing tokenization, contactless card integration, and EMV standards.",
+      "createdBy": "user-1",
+      "createdAt": "2026-07-24T19:49:57.527Z",
+      "isPrivate": false,
+      "memberIds": [
+        "user-1",
+        "user-2",
+        "user-3",
+        "npci_assistant"
+      ]
+    },
+    {
+      "id": "comm-3",
+      "name": "Product Design & Ideas",
+      "description": "A sandbox space for brainstorming new NPCI products and UX flows.",
+      "createdBy": "user-5",
+      "createdAt": "2026-07-29T19:49:57.527Z",
+      "isPrivate": false,
+      "memberIds": [
+        "user-1",
+        "user-5",
+        "user-6"
+      ]
+    },
+    {
+      "id": "comm-4",
+      "name": "Platform Security & Audits",
+      "description": "Private discussions on system health, internal penetration testing, and logs.",
+      "createdBy": "user-3",
+      "createdAt": "2026-08-03T19:49:57.527Z",
+      "isPrivate": true,
+      "memberIds": [
+        "user-2",
+        "user-3"
+      ]
+    }
+  ],
+  "threads": [
+    {
+      "id": "thread-1",
+      "communityId": "comm-1",
+      "title": "Clarification on UPI 2.0 ₹5 Lakh limit for educational payments",
+      "content": "Hi team, we are implementing educational payments for high-velocity universities. The UPI compliance guide v2.1 states the limit is extended up to ₹5 Lakhs, but is this only for pre-approved merchant categories or can any standard merchant apply for this limit? Please advise.",
+      "authorId": "user-1",
+      "createdAt": "2026-08-08T19:49:57.527Z",
+      "upvotes": [
+        "user-2",
+        "user-5"
+      ],
+      "isPinned": true,
+      "tags": [
+        "UPI",
+        "Limits",
+        "Compliance"
+      ],
+      "attachments": [
+        {
+          "name": "UPI-Limit-Matrix-2026.pdf",
+          "type": "application/pdf",
+          "size": "1.2 MB",
+          "url": "#"
+        }
+      ]
+    },
+    {
+      "id": "thread-2",
+      "communityId": "comm-2",
+      "title": "RuPay Card Offline Contactless limit increase to ₹5000",
+      "content": "The v4.0 security guidelines specify offline contactless transactions up to ₹5,000 without requiring PIN entry. Do we have to implement offline risk scoring at the terminal level for this, or does the issuer handle liability entirely? Let's compile the terminal configuration requirements.",
+      "authorId": "user-1",
+      "createdAt": "2026-08-10T19:49:57.527Z",
+      "upvotes": [
+        "user-3",
+        "user-6"
+      ],
+      "isPinned": false,
+      "tags": [
+        "RuPay",
+        "Contactless",
+        "Security"
+      ]
+    }
+  ],
+  "comments": [
+    {
+      "id": "comment-1",
+      "threadId": "thread-1",
+      "content": "Hi Pravin, yes. According to Section 'Transaction Limits' of the UPI Compliance guide, this extended limit is strictly restricted to pre-approved merchant categories in MCC 8211, 8220 (Schools and Colleges). High-risk categories or standard merchants are restricted to the default ₹1 Lakh limit.",
+      "authorId": "user-2",
+      "createdAt": "2026-08-09T19:49:57.527Z",
+      "upvotes": [
+        "user-1"
+      ]
+    },
+    {
+      "id": "comment-2",
+      "threadId": "thread-1",
+      "content": "NPCI Assistant, can you confirm if healthcare merchants also qualify for the ₹5 Lakh limit?",
+      "authorId": "user-1",
+      "createdAt": "2026-08-10T19:49:57.527Z",
+      "upvotes": []
+    },
+    {
+      "id": "comment-3",
+      "threadId": "thread-1",
+      "parentId": "comment-2",
+      "content": "Based on the official **NPCI UPI 2.0 Compliance Guide (v2.1)**, healthcare merchants (specifically hospitals under pre-approved MCCs) indeed qualify for the extended transaction limit of up to **₹5 Lakhs per transaction**. Other general categories remain capped at ₹1 Lakh.",
+      "authorId": "npci_assistant",
+      "createdAt": "2026-08-10T19:59:57.527Z",
+      "upvotes": [
+        "user-1",
+        "user-2"
+      ]
+    }
+  ],
+  "chats": [
+    {
+      "id": "chat-1",
+      "isGroup": false,
+      "participants": [
+        "user-1",
+        "npci_assistant"
+      ],
+      "createdAt": "2026-08-03T19:49:57.528Z"
+    },
+    {
+      "id": "chat-2",
+      "isGroup": false,
+      "participants": [
+        "user-1",
+        "user-5"
+      ],
+      "createdAt": "2026-08-11T19:49:57.528Z"
+    },
+    {
+      "id": "chat-group-1",
+      "name": "UPI Developers Sync",
+      "isGroup": true,
+      "participants": [
+        "user-1",
+        "user-5",
+        "user-6"
+      ],
+      "createdAt": "2026-08-08T19:49:57.528Z"
+    }
+  ],
+  "chatMessages": [
+    {
+      "id": "msg-1",
+      "chatId": "chat-1",
+      "senderId": "user-1",
+      "content": "Hi NPCI Assistant, tell me about AePS daily cash withdrawal limits.",
+      "createdAt": "2026-08-12T19:49:57.528Z",
+      "status": "read",
+      "readBy": [
+        "npci_assistant"
+      ]
+    },
+    {
+      "id": "msg-2",
+      "chatId": "chat-1",
+      "senderId": "npci_assistant",
+      "content": "According to the **AePS Operation Guidelines 2026 (v1.2)**, the daily cash withdrawal limit is capped at **₹10,000 per Aadhaar number**. Let me know if you need more details on micro-ATM security policies!",
+      "createdAt": "2026-08-12T19:50:12.528Z",
+      "status": "read",
+      "readBy": [
+        "user-1"
+      ]
+    },
+    {
+      "id": "msg-3",
+      "chatId": "chat-2",
+      "senderId": "user-1",
+      "content": "Hey Priya, do we have the final BBPS screen design designs ready for review?",
+      "createdAt": "2026-08-13T18:49:57.528Z",
+      "status": "read",
+      "readBy": [
+        "user-5"
+      ]
+    }
+  ],
+  "notifications": [
+    {
+      "id": "notif-1",
+      "userId": "user-1",
+      "type": "reply",
+      "title": "Reply in UPI Limit Thread",
+      "content": "Neha (Compliance) replied to your thread 'Clarification on UPI 2.0 limit'.",
+      "sourceId": "thread-1",
+      "isRead": false,
+      "createdAt": "2026-08-09T19:49:57.528Z"
+    },
+    {
+      "id": "notif-2",
+      "userId": "user-1",
+      "type": "mention",
+      "title": "NPCI Assistant Mentioned You",
+      "content": "NPCI Assistant replied: 'Based on the official NPCI UPI 2.0 Compliance Guide...'",
+      "sourceId": "thread-1",
+      "isRead": false,
+      "createdAt": "2026-08-10T19:49:57.528Z"
+    }
+  ],
+  "policyDocuments": [
+    {
+      "id": "policy-1",
+      "title": "NPCI UPI 2.0 Compliance Guide",
+      "description": "Rules regarding UPI transaction limits, MCC eligibility, merchant onboarding risk, and Unified Dispute Redressal (UDIR).",
+      "fileName": "UPI_Compliance_v2.1.pdf",
+      "version": "2.1",
+      "uploadedBy": "user-2",
+      "uploadedAt": "2026-07-14T19:49:57.528Z",
+      "type": "spec",
+      "chunks": [
+        {
+          "section": "Transaction Limits",
+          "text": "The standard transaction limit for P2P UPI payments is ₹1 Lakh per transaction. However, for specific pre-approved high-velocity merchant categories including Educational Institutions and Healthcare, the limit is extended up to ₹5 Lakhs per transaction. General retail categories must not exceed the ₹1 Lakh threshold under any circumstances."
+        },
+        {
+          "section": "Unified Dispute Redressal System (UDIR)",
+          "text": "All UPI participant banks must integrate the Unified Dispute Redressal System (UDIR) to auto-resolve failed payments. The system must process and credit failed transactions within a T+1 day window. A compensation of ₹100 per day is payable to customers for failed transaction resolution delays extending beyond T+2 days."
+        },
+        {
+          "section": "Merchant Onboarding and Velocity Caps",
+          "text": "Every acquiring entity must perform strict KYC checks prior to merchant onboarding. Newly onboarded high-risk merchants are restricted to a daily velocity limit of ₹2 Lakhs for the first 30 days of clean account operations. Capital limits may be raised upon successful post-onboarding audits."
+        }
+      ]
+    },
+    {
+      "id": "policy-2",
+      "title": "RuPay Card Security Protocol",
+      "description": "Compliance protocols for EMV card issuing, tokenization mandates, and offline contactless payments.",
+      "fileName": "RuPay_Security_v4.0.pdf",
+      "version": "4.0",
+      "uploadedBy": "user-2",
+      "uploadedAt": "2026-07-24T19:49:57.528Z",
+      "type": "spec",
+      "chunks": [
+        {
+          "section": "Tokenization Mandate",
+          "text": "In compliance with RBI circulars, no retail merchant or payment aggregator may store raw card-on-file data. All RuPay card credentials must be fully tokenized using an authorized token service provider (TSP) prior to saving in merchant databases. Only masked card numbers and card network tokens are allowed."
+        },
+        {
+          "section": "Offline Contactless Payments",
+          "text": "To enhance micro-payment speeds, offline contactless payments via RuPay chip cards are permitted up to a threshold of ₹5,000 per transaction at physical point-of-sale (POS) terminals without needing card PIN entry. The cardholder's cumulative offline transaction limit is capped at ₹10,000 before a forced online PIN reset is required."
+        }
+      ]
+    },
+    {
+      "id": "policy-3",
+      "title": "AePS Operation Guidelines 2026",
+      "description": "Biometric authentication standards, Micro-ATM operations, and withdrawal limit guides.",
+      "fileName": "AePS_Guidelines_v1.2.pdf",
+      "version": "1.2",
+      "uploadedBy": "user-2",
+      "uploadedAt": "2026-08-03T19:49:57.528Z",
+      "type": "spec",
+      "chunks": [
+        {
+          "section": "Micro-ATM Security",
+          "text": "All Aadhaar Enabled Payment System (AePS) Micro-ATMs must enforce dual-factor authentication. This includes biometric fingerprint/iris confirmation of the Business Correspondent (BC) alongside the customer's biometric authentication. No transaction may proceed without matching the correspondent’s live biometric template."
+        },
+        {
+          "section": "Daily Withdrawal Limits",
+          "text": "To mitigate fraud risks associated with rural agent networks, the maximum daily cash withdrawal limit is restricted to ₹10,000 per Aadhaar number. A maximum of 5 cash withdrawal attempts are allowed per account holder per day across all bank accounts connected to the Aadhaar ID."
+        }
+      ]
+    },
+    {
+      "id": "policy-complaint-1",
+      "title": "UPI Daily Velocity Breach Complaint",
+      "description": "Systemic velocity breach report logged for high-risk merchant onboardings without valid KYC verification.",
+      "fileName": "UPI_Breach_Complaint_2026.pdf",
+      "version": "1.0",
+      "uploadedBy": "user-2",
+      "uploadedAt": "2026-08-08T19:49:57.528Z",
+      "type": "complaint",
+      "chunks": [
+        {
+          "section": "KYC Non-Compliance Details",
+          "text": "Several high-risk merchants registered under MCC 5311 (Department Stores) breached the daily velocity limit of ₹2 Lakhs on day 3 of operations. Acquiring entities failed to execute mandatory post-onboarding KYC checks."
+        },
+        {
+          "section": "Corrective Escalation Mandate",
+          "text": "Acquiring gateway operations are hereby instructed to freeze settlements for merchant IDs M-9304 and M-1194 pending an on-site security compliance audit. Failure to comply will lead to a penalty of ₹50,000 per violation day."
+        }
+      ]
+    }
+  ],
+  "auditLogs": [
+    {
+      "id": "log-1",
+      "action": "System Initialization",
+      "actorId": "user-3",
+      "actorName": "amit_platform",
+      "timestamp": "2026-07-04T19:49:57.528Z",
+      "details": "Featurist NPCI Forum engine seeded with initial compliance documentation and admin privileges."
+    },
+    {
+      "id": "log-2",
+      "action": "Policy Document Upload",
+      "actorId": "user-2",
+      "actorName": "neha_compliance",
+      "timestamp": "2026-07-14T19:49:57.528Z",
+      "details": "Uploaded NPCI UPI 2.0 Compliance Guide version 2.1 to central RAG memory bank."
+    }
+  ],
+  "deptRoleList": [
+    {
+      "id": "dr-1",
+      "name": "Operations",
+      "category": "Department",
+      "description": "Payment processing, operational oversight, and settlement operations",
+      "activeCount": 5
+    },
+    {
+      "id": "dr-2",
+      "name": "UPI Product",
+      "category": "Department",
+      "description": "UPI 2.0 specs, merchant onboarding, and dispute resolution features",
+      "activeCount": 3
+    },
+    {
+      "id": "dr-3",
+      "name": "Compliance",
+      "category": "Department",
+      "description": "Regulatory compliance, policy audits, and risk assessment",
+      "activeCount": 4
+    },
+    {
+      "id": "dr-4",
+      "name": "Risk & Settlement",
+      "category": "Department",
+      "description": "Fraud monitoring, velocity caps, and financial settlements",
+      "activeCount": 2
+    },
+    {
+      "id": "dr-5",
+      "name": "Core Technology",
+      "category": "Department",
+      "description": "Infrastructure maintenance, micro-services, and platform architecture",
+      "activeCount": 6
+    },
+    {
+      "id": "dr-6",
+      "name": "Platform Administrator",
+      "category": "Role",
+      "description": "Full system administrative control, user deletion, and security governance",
+      "activeCount": 2
+    },
+    {
+      "id": "dr-7",
+      "name": "Compliance Admin",
+      "category": "Role",
+      "description": "Policy document uploads, specification management, and audit enforcement",
+      "activeCount": 3
+    },
+    {
+      "id": "dr-8",
+      "name": "Team Lead / Owner",
+      "category": "Role",
+      "description": "Community channel creation, team supervision, and thread moderation",
+      "activeCount": 4
+    },
+    {
+      "id": "dr-9",
+      "name": "Standard Employee",
+      "category": "Role",
+      "description": "General forum participant, discussion contributor, and chat user",
+      "activeCount": 12
+    }
+  ],
+  "stickyNotes": []
+}

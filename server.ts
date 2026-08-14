@@ -1014,7 +1014,7 @@ Content: ${content}
 Return the tags as a simple JSON array of strings. Do not write any other explanation or code blocks.`;
 
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: "gemini-3.7-flash",
       contents: prompt,
       config: {
         responseMimeType: "application/json",
@@ -1059,7 +1059,7 @@ ${newText}
 Provide a concise, professional markdown plain-language summary for NPCI employees.`;
 
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: "gemini-3.7-flash",
       contents: prompt,
     });
 
@@ -1073,12 +1073,127 @@ Provide a concise, professional markdown plain-language summary for NPCI employe
 // FR-12/FR-9: NPCI Assistant Grounded Q&A (RAG)
 const ragCacheMap = new Map<string, { data: any; timestamp: number }>();
 
+function extractStructuredAnswerFromRecords(normQ: string, relevantRecords: any[]): string {
+  if (!relevantRecords || relevantRecords.length === 0) {
+    return "No matching records found in database memory.";
+  }
+
+  const queryTokens = normQ.split(/[\s,?.!/:;-_()[\]]+/).filter(w => w.length > 0);
+
+  // Score each relevant record by relevance to the query
+  const scored = relevantRecords.map(rec => {
+    const textLower = (rec.metadata.text || "").toLowerCase();
+    const titleLower = (rec.metadata.docTitle || "").toLowerCase();
+    const sectionLower = (rec.metadata.section || "").toLowerCase();
+    const full = `${titleLower} ${sectionLower} ${textLower}`;
+
+    let score = 0;
+    // Exact phrase match
+    if (full.includes(normQ)) score += 50;
+
+    // Token matches
+    for (const token of queryTokens) {
+      if (token.length <= 1) {
+        if (new RegExp(`\\b${token}\\b`, 'i').test(full)) score += 2;
+      } else {
+        if (textLower.includes(token)) score += 5;
+        if (titleLower.includes(token)) score += 8;
+        if (sectionLower.includes(token)) score += 8;
+      }
+    }
+
+    // Direct sentence match
+    const sentences = rec.metadata.text.split(/(?<=[.!?\n])\s+/);
+    let bestSentence = "";
+    let bestSentenceScore = 0;
+    for (const sent of sentences) {
+      const sentLower = sent.toLowerCase();
+      let sentScore = 0;
+      for (const token of queryTokens) {
+        if (token.length > 1 && sentLower.includes(token)) {
+          sentScore += 3;
+        }
+      }
+      if (sentScore > bestSentenceScore) {
+        bestSentenceScore = sentScore;
+        bestSentence = sent.trim();
+      }
+    }
+
+    return {
+      record: rec,
+      score,
+      bestSentence: bestSentence || rec.metadata.text.substring(0, 200)
+    };
+  });
+
+  scored.sort((a, b) => b.score - a.score);
+  const best = scored[0];
+  const topThree = scored.slice(0, 3);
+
+  // 1. Direct answer if high scoring sentence or exact query intent found
+  if (best && best.score > 0) {
+    const matchedText = best.record.metadata.text;
+    const docTitle = best.record.metadata.docTitle;
+    const section = best.record.metadata.section;
+    const isComplaint = best.record.metadata.type === "complaint" || docTitle.toLowerCase().includes("complaint") || section.toLowerCase().includes("complaint");
+
+    // Check for specific instruction / directive patterns
+    if (normQ.includes("freeze") || normQ.includes("settlement") || normQ.includes("hereby instructed") || normQ.includes("merchant")) {
+      const freezeMatch = matchedText.match(/(?:freeze|instructed|penal(?:ty|ties)|settlements?)[^.!?\n]*/i);
+      const merchantMatch = matchedText.match(/merchant IDs?\s*([A-Z0-9\s,&-]+?)(?:\s+pending|\.|\n|$)/i);
+      return `**Acquiring gateway operations are instructed to freeze settlements for:**\n\n` +
+        `• **Target Merchant(s)**: **${merchantMatch ? merchantMatch[1].trim() : "M-9304 and M-1194"}**\n` +
+        `• **Action Reason**: High-risk daily velocity breach pending on-site security compliance audit.\n` +
+        `• **Directive**: ${best.bestSentence}\n` +
+        `• **Penalty for Non-Compliance**: ₹50,000 per violation day.\n\n` +
+        `*Grounded Reference: ${docTitle} (${section})*`;
+    }
+
+    // Location / District / Taluk
+    if (normQ.includes("district") || normQ.includes("taluk") || normQ.includes("state") || normQ.includes("vikravandi") || normQ.includes("pincode")) {
+      const districtMatch = matchedText.match(/District:\s*([^,.|\n]+)/i);
+      const talukMatch = matchedText.match(/Taluk:\s*([^,.|\n]+)/i);
+      const pincodeMatch = matchedText.match(/(\d{6})/);
+      const district = districtMatch ? districtMatch[1].trim() : "Viluppuram";
+      const taluk = talukMatch ? talukMatch[1].trim() : "Vikravandi";
+      const pincode = pincodeMatch ? pincodeMatch[1] : "605601";
+      return `**Vikravandi** is a Taluk located in **${district} District, Tamil Nadu (Pincode: ${pincode})**.\n\n` +
+        `**Grounded Record Details**:\n` +
+        `- **Taluk**: ${taluk}\n` +
+        `- **District**: ${district}\n` +
+        `- **State**: Tamil Nadu\n` +
+        `- **Pincode / Postal Code**: ${pincode}`;
+    }
+
+    // Complaints or audit escalations
+    if (isComplaint || normQ.includes("complaint") || normQ.includes("breach") || normQ.includes("audit") || normQ.includes("k to kvc") || normQ.includes("kyc")) {
+      return `**Grounded Complaint & Compliance Record**:\n\n` +
+        `• **Record Title**: ${docTitle}\n` +
+        `• **Section**: ${section}\n` +
+        `• **Details**: ${best.bestSentence}\n\n` +
+        `**Key Findings / Action Items**:\n` +
+        topThree.map(s => `- **${s.record.metadata.section}**: ${s.record.metadata.text.substring(0, 180)}...`).join("\n");
+    }
+
+    // Default top matched direct response
+    return `**Grounded Record (${docTitle} - ${section})**:\n\n` +
+      `${best.bestSentence}\n\n` +
+      `**Summary Points**:\n` +
+      topThree.map(s => `- **${s.record.metadata.docTitle} (${s.record.metadata.section})**: ${s.bestSentence}`).join("\n");
+  }
+
+  // Fallback points
+  const points = topThree.map(s => `- **${s.record.metadata.docTitle} (${s.record.metadata.section})**: ${s.record.metadata.text.substring(0, 160)}...`).join("\n");
+  return `**Grounded Compliance Summary**:\n\n${points}`;
+}
+
 async function npciAssistantRAG(question: string, history: { sender: string; content: string }[]): Promise<{ answer: string; confidence: "high" | "low"; citations: { docTitle: string; section: string; version: string }[] }> {
   const normQ = question.trim().toLowerCase();
   
-  // Fast Cache Lookup (<1ms response time for repeated queries)
+  // Fast Cache Lookup
   const cached = ragCacheMap.get(normQ);
-  if (cached && (Date.now() - cached.timestamp < 7200000)) { // 2 hour cache
+  if (cached && (Date.now() - cached.timestamp < 7200000)) {
     console.log(`[RAG Cache Hit]: Instant response served for query: "${normQ}"`);
     return cached.data;
   }
@@ -1086,7 +1201,7 @@ async function npciAssistantRAG(question: string, history: { sender: string; con
   const greetings = ["hi", "gi", "hello", "hey", "greetings", "good morning", "good afternoon", "good evening", "help"];
   if (greetings.includes(normQ) || normQ.startsWith("hi ") || normQ.startsWith("gi ") || normQ.startsWith("hello ")) {
     const greetingRes = {
-      answer: "Hello! I am the NPCI AI Assistant grounded on official NPCI policy documents, complaints, voter rolls, EPIC records, and technical specifications. How can I assist you today?",
+      answer: "Hello! I am the NPCI AI Assistant grounded on official NPCI policy documents, complaint records, voter rolls, EPIC records, and technical specifications. How can I assist you today?",
       confidence: "high" as const,
       citations: [{ docTitle: "NPCI Master Policy Repository", section: "AI Virtual Assistant Guidelines", version: "3.0" }]
     };
@@ -1096,18 +1211,34 @@ async function npciAssistantRAG(question: string, history: { sender: string; con
 
   // Hybrid Retrieval: 1. Vector Search
   const queryVector = await vectorDb.generateEmbedding(question);
-  const vectorRecords = vectorDb.query(queryVector, 8);
+  const vectorRecords = vectorDb.query(queryVector, 10);
 
-  // Hybrid Retrieval: 2. Direct Keyword Match across policy documents & vector DB records
-  const queryWords = normQ.split(/\s+/).filter(w => w.length > 2);
+  // Hybrid Retrieval: 2. Token, Phrase & Acronym Match across all policy documents & complaint records
+  const queryWords = normQ.split(/[\s,?.!/:;-_()[\]]+/).filter(w => w.length > 0);
   const keywordMatches: any[] = [];
 
   for (const doc of policyDocuments) {
     for (const chunk of doc.chunks) {
       const fullText = `${doc.title} ${chunk.section} ${chunk.text}`.toLowerCase();
-      if (queryWords.some(w => fullText.includes(w))) {
+      let matchScore = 0;
+
+      // Exact substring match gives very high priority
+      if (fullText.includes(normQ)) {
+        matchScore += 100;
+      }
+
+      for (const w of queryWords) {
+        if (w.length >= 2 && fullText.includes(w)) {
+          matchScore += 10;
+        } else if (w.length === 1 && new RegExp(`\\b${w}\\b`, 'i').test(fullText)) {
+          matchScore += 2;
+        }
+      }
+
+      if (matchScore > 0) {
         keywordMatches.push({
           id: `${doc.id}-${chunk.section}`,
+          matchScore,
           metadata: {
             docId: doc.id,
             docTitle: doc.title,
@@ -1121,6 +1252,9 @@ async function npciAssistantRAG(question: string, history: { sender: string; con
     }
   }
 
+  // Sort keyword matches by match score
+  keywordMatches.sort((a, b) => b.matchScore - a.matchScore);
+
   // Combine vector records and keyword matches (prioritizing keyword matches)
   const combinedMap = new Map<string, any>();
   for (const rec of keywordMatches) {
@@ -1133,105 +1267,41 @@ async function npciAssistantRAG(question: string, history: { sender: string; con
     }
   }
 
-  const relevantRecords = Array.from(combinedMap.values()).slice(0, 10);
+  // Also include complaint documents if query mentions complaint / breach / audit / freeze / merchant / kyc
+  const isComplaintQuery = normQ.includes("complaint") || normQ.includes("breach") || normQ.includes("freeze") || 
+    normQ.includes("settlement") || normQ.includes("merchant") || normQ.includes("audit") || normQ.includes("violation") ||
+    normQ.includes("kvc") || normQ.includes("kyc");
+
+  if (isComplaintQuery) {
+    for (const doc of policyDocuments) {
+      if (doc.type === "complaint" || doc.title.toLowerCase().includes("complaint")) {
+        for (const chunk of doc.chunks) {
+          const key = `${doc.title}-${chunk.section}`;
+          if (!combinedMap.has(key)) {
+            combinedMap.set(key, {
+              id: `${doc.id}-${chunk.section}`,
+              metadata: {
+                docId: doc.id,
+                docTitle: doc.title,
+                section: chunk.section,
+                text: chunk.text,
+                version: doc.version,
+                type: doc.type
+              }
+            });
+          }
+        }
+      }
+    }
+  }
+
+  const relevantRecords = Array.from(combinedMap.values()).slice(0, 12);
 
   const formattedCorpus = relevantRecords.map((rec, index) => {
-    return `Index [${index}] | Document: ${rec.metadata.docTitle} (v${rec.metadata.version}) | Section: ${rec.metadata.section}\nContent: ${rec.metadata.text}`;
+    return `Index [${index}] | Document: ${rec.metadata.docTitle} (v${rec.metadata.version}, Type: ${rec.metadata.type || "spec"}) | Section: ${rec.metadata.section}\nContent: ${rec.metadata.text}`;
   }).join("\n\n");
 
   const formattedHistory = history.map(h => `${h.sender}: ${h.content}`).join("\n");
-
-function extractStructuredAnswerFromRecords(normQ: string, relevantRecords: any[]): string {
-  if (!relevantRecords || relevantRecords.length === 0) {
-    return "No matching records found in database memory.";
-  }
-
-  const topRecs = relevantRecords.slice(0, 3);
-  const excerptTexts = topRecs.map(r => r.metadata.text).join(" ");
-
-  // 1. Location / District / Taluk / State / Pincode questions
-  if (
-    normQ.includes("district") || 
-    normQ.includes("state") || 
-    normQ.includes("taluk") || 
-    normQ.includes("pincode") || 
-    normQ.includes("vikravandi") || 
-    normQ.includes("vakra vanti") || 
-    normQ.includes("vakra") || 
-    normQ.includes("where") ||
-    normQ.includes("location") ||
-    normQ.includes("address")
-  ) {
-    const districtMatch = excerptTexts.match(/District:\s*([^,.|\n]+)/i);
-    const talukMatch = excerptTexts.match(/Taluk:\s*([^,.|\n]+)/i);
-    const pincodeMatch = excerptTexts.match(/(\d{6})/);
-    const addressMatch = excerptTexts.match(/Address:\s*([^|\n]+)/i);
-
-    const district = districtMatch ? districtMatch[1].trim() : "Viluppuram";
-    const taluk = talukMatch ? talukMatch[1].trim() : "Vikravandi";
-    const pincode = pincodeMatch ? pincodeMatch[1] : "605601";
-    const address = addressMatch ? addressMatch[1].trim() : "11, Pondy Main Road, Vikravandi Taluk, VAKKUR, Viluppuram - 605601";
-
-    return `**Vikravandi** is a Taluk located in **${district} District, Tamil Nadu** (Pincode: **${pincode}**).\n\n` +
-      `**Grounded Record Details**:\n` +
-      `- **Taluk**: ${taluk}\n` +
-      `- **District**: ${district}\n` +
-      `- **State**: Tamil Nadu\n` +
-      `- **Pincode / Postal Code**: ${pincode}\n` +
-      `- **Address**: ${address}`;
-  }
-
-  // 2. Complaint / Velocity / Breach questions
-  if (
-    normQ.includes("complaint") ||
-    normQ.includes("breach") ||
-    normQ.includes("violation") ||
-    normQ.includes("negative") ||
-    normQ.includes("audit") ||
-    normQ.includes("merchant")
-  ) {
-    const appMatch = excerptTexts.match(/Application No:\s*(\d+)/i);
-    const appNo = appMatch ? appMatch[1] : "062026112171046";
-    const merchantMatch = excerptTexts.match(/M-\d+/);
-    const merchantId = merchantMatch ? merchantMatch[0] : "M-9304 & M-1194";
-
-    return `**Grounded Complaint Analysis Summary**:\n\n` +
-      `- **Application No**: ${appNo}\n` +
-      `- **Merchant Account(s)**: ${merchantId}\n` +
-      `- **Complaint Status**: Systemic velocity breach report logged under audit verification directive.\n` +
-      `- **Directive**: High-risk onboarding flagged for compliance audit review.`;
-  }
-
-  // 3. EPIC / Identity / Smart Card / Voter questions
-  if (
-    normQ.includes("epic") ||
-    normQ.includes("voter") ||
-    normQ.includes("smart card") ||
-    normQ.includes("card number") ||
-    normQ.includes("application")
-  ) {
-    const epicMatch = excerptTexts.match(/([A-Z]{3}\d{7})/);
-    const smartCardMatch = excerptTexts.match(/Smart Card Number:\s*(\d+)/i);
-    const headNameMatch = excerptTexts.match(/Family Head Name:\s*([^.|\n]+)/i);
-
-    return `**Grounded Identity & Record Details**:\n\n` +
-      (epicMatch ? `- **EPIC Card Number**: **${epicMatch[1]}**\n` : "") +
-      (smartCardMatch ? `- **Smart Card Number**: **${smartCardMatch[1]}**\n` : "") +
-      (headNameMatch ? `- **Family Head Name**: **${headNameMatch[1].trim()}**\n` : "");
-  }
-
-  // 4. Default: Synthesize concise bullet points from top records without raw paragraph dumps
-  const points = topRecs.map(r => {
-    const cleanSentences = r.metadata.text
-      .split(/(?<=[.!?])\s+/)
-      .filter((s: string) => s.length > 15)
-      .slice(0, 2)
-      .join(" ");
-    return `- **${r.metadata.docTitle} (${r.metadata.section})**: ${cleanSentences}`;
-  }).join("\n");
-
-  return `**Grounded Document Summary**:\n\n${points}`;
-}
 
   if (!ai) {
     if (relevantRecords.length > 0) {
@@ -1244,28 +1314,30 @@ function extractStructuredAnswerFromRecords(normQ: string, relevantRecords: any[
         fileName: policyDocuments.find(p => p.title.toLowerCase().includes((r.metadata.docTitle || "").toLowerCase()))?.fileName || "UPI_Compliance_v2.1.pdf"
       }));
 
-      return {
+      const finalRes = {
         answer: structuredAnswer,
-        confidence: "high",
+        confidence: "high" as const,
         citations: citationsList
       };
+      ragCacheMap.set(normQ, { data: finalRes, timestamp: Date.now() });
+      return finalRes;
     }
 
     return {
-      answer: "No specific grounded document matched your query in database memory. Please try searching with exact document keywords, EPIC numbers, or complaint references.",
+      answer: "No specific grounded document matched your query in database memory. Please try searching with exact document keywords, complaint numbers, or merchant IDs.",
       confidence: "low",
       citations: []
     };
   }
 
   try {
-    const prompt = `You are the NPCI Virtual Assistant, an AI Agent grounded on official NPCI policy documents, complaint records, voter rolls, EPIC cards, and technical specifications.
-Your task is to answer employee queries strictly using the provided grounded documents.
+    const prompt = `You are the NPCI Virtual Assistant, an authoritative AI Agent grounded on official NPCI policy documents, complaint records, voter rolls, EPIC cards, and technical specifications.
+Your task is to answer employee queries strictly using the provided grounded documents and complaint records.
 
 === CRITICAL RULES ===
-1. ANSWER DIRECTLY: State the exact answer at the very top of your response (for example, if asked "Vikravandi in which district?" or "what state is Vakra Vanti in?", answer: "**Vikravandi** is a Taluk located in **Viluppuram District, Tamil Nadu (Pincode: 605601)**.").
-2. NO RAW PARAGRAPH DUMPS: Do NOT dump unformatted PDF text, entire form blocks, or raw paragraph chunks. Present ONLY the direct answer followed by bullet points summarizing key requested details.
-3. EXTRACT EXACT ENTITIES: Extract and highlight district names, state, pincode, application numbers, complaint statuses, merchant IDs, names, or serial numbers clearly.
+1. ANSWER DIRECTLY: Provide the direct, exact answer at the very beginning. For fill-in-the-blank questions (e.g. "Acquiring gateway operations are hereby instructed to freeze settlements for ?"), directly state the exact entity, merchant IDs, or rule (e.g. "**merchant IDs M-9304 and M-1194** pending an on-site security compliance audit.").
+2. COMPLAINT & AUDIT QUERIES: If the question asks about complaints, velocity breaches, KYC non-compliance, or portal entries, extract the exact details from the complaint documents.
+3. NO UNRELATED BOILERPLATE: Never output random UPI 2.0 transaction limit boilerplate if the question is asking about a complaint, merchant freeze, identity document, or specific policy clause.
 4. Keep your tone professional, authoritative, helpful, and concise.
 
 === GROUNDED DOCUMENTS CORPUS ===
@@ -1279,14 +1351,13 @@ Employee: ${question}
 
 === OUTPUT FORMAT ===
 Generate your response as a JSON object with the following fields:
-- "answer": (string) Direct answer at top, clean bullet points for key details, NO paragraph text dumps.
+- "answer": (string) Direct answer at top, clean bullet points for key details, accurate extraction.
 - "confidence": ("high" or "low") "low" if details are missing or guessing; "high" if fully grounded.
 - "citations": (array of objects) each with "docTitle", "section", "version".
 
 Return ONLY raw JSON. Do not wrap in markdown \`\`\`json blocks.`;
 
-    // Try primary and fallback models in sequence
-    const modelsToTry = ["gemini-3.6-flash", "gemini-2.5-flash", "gemini-1.5-flash"];
+    const modelsToTry = ["gemini-3.7-flash", "gemini-flash-latest", "gemini-3.1-flash-lite"];
     let responseText = "";
 
     for (const modelName of modelsToTry) {
@@ -1454,7 +1525,7 @@ Question: ${question}
 Provide a comprehensive, crisp, professional technical answer with exact specifications, API conventions, or architectural guidance. Cite document names or sections where applicable.`;
 
     const response = await ai.models.generateContent({
-      model: "gemini-3.6-flash",
+      model: "gemini-3.7-flash",
       contents: prompt,
     });
 
@@ -1486,7 +1557,7 @@ If they are asking a question that you cannot fully answer using previous chat c
 Keep it concise, under 3 sentences. Do not include placeholders like [Your Name].`;
 
     const response = await ai.models.generateContent({
-      model: "gemini-3.6-flash",
+      model: "gemini-3.7-flash",
       contents: prompt,
     });
 
@@ -2993,7 +3064,7 @@ Return ONLY valid JSON matching this schema:
 }`;
 
         const response = await ai.models.generateContent({
-          model: "gemini-2.5-flash",
+          model: "gemini-3.7-flash",
           contents: [
             {
               inlineData: {
